@@ -1,0 +1,39 @@
+server:
+  port: 5000
+
+spring:
+  security:
+    user:
+      name: scifunapp
+      password: password123
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: phanduykiet29@gmail.com
+    password: nali prpa izdp pvrq
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/test
+
+# ==== JWT (dùng cho JwtUtil) ====
+app:
+  jwt:
+    secret: ${JWT_SECRET:G7k!4xR9z@Wq2vH#bM8sY*1pF&uT0dL^jC3eQ%Nw6aS!oVhZ}
+    expiresSeconds: ${JWT_EXPIRES_SECONDS:3600}   # 3600s = 1h
+
+# ==== Cloudinary ====
+cloudinary:
+  cloud_name: ${CLOUDINARY_CLOUD_NAME:dglm2f7sr}
+  api_key: ${CLOUDINARY_API_KEY:616287875981434}
+  api_secret: ${CLOUDINARY_API_SECRET:WRKcek7fKoyzFe8iLeB6kMTTB8c}
+
+# ==== Elastic ====
+es:
+  node: ${ES_NODE:https://my-elasticsearch-project-ccf89e.es.us-central1.gcp.elastic.cloud:443}
+  apiKey: ${ES_API_KEY:QzVGbm5Kb0JhSHZDNjRFa296UDk6NkcxTVRjNTY5MzkzQ3ZNLVlTdXFjdw==}
