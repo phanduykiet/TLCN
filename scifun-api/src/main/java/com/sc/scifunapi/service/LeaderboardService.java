@@ -1,5 +1,6 @@
 package com.sc.scifunapi.service;
 
+import com.sc.scifunapi.dto.notification.RankChangedParams;
 import com.sc.scifunapi.entity.Leaderboard;
 import com.sc.scifunapi.entity.Subject;
 import com.sc.scifunapi.entity.User;
@@ -27,6 +28,7 @@ public class LeaderboardService {
     private final UserProgressRepository userProgressRepository;
     private final UserRepository userRepository;
     private final SubjectRepository subjectRepository;
+    private final NotificationService notificationService;
 
     /**
      * Làm mới bảng xếp hạng cho một môn học (alltime / daily / weekly / monthly)
@@ -42,11 +44,11 @@ public class LeaderboardService {
             period = "alltime";
         }
 
-        // Lấy subject (để lấy tên môn học)
+        // 1. Lấy subject
         Subject subject = subjectRepository.findById(subjectId)
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại"));
 
-        // Lấy rank cũ để gán previousRank
+        // 2. Lấy rank cũ để gán previousRank
         List<Leaderboard> oldRows =
                 leaderboardRepository.findBySubjectIdAndPeriodOrderByRankAsc(subjectId, period);
 
@@ -57,11 +59,10 @@ public class LeaderboardService {
             }
         }
 
-        // Lấy toàn bộ UserProgress của subject này
+        // 3. Lấy UserProgress
         List<UserProgress> progresses = userProgressRepository.findBySubjectId(subjectId);
 
         if (progresses.isEmpty()) {
-            // Không còn ai có progress -> xoá hết leaderboard của subject+period
             leaderboardRepository.deleteBySubjectIdAndPeriod(subjectId, period);
             return Map.of(
                     "subjectId", subjectId,
@@ -71,7 +72,7 @@ public class LeaderboardService {
             );
         }
 
-        // Lấy thông tin user (fullname, avatar) để fill leaderboard
+        // 4. Lấy info user
         Set<String> userIds = progresses.stream()
                 .map(UserProgress::getUserId)
                 .filter(Objects::nonNull)
@@ -86,7 +87,6 @@ public class LeaderboardService {
 
         final double MULTIPLIER = 1e12;
 
-        // Tạm thời gói dữ liệu cần để sort
         class RowTmp {
             UserProgress progress;
             double totalScore;
@@ -100,10 +100,8 @@ public class LeaderboardService {
             double avgScoreVal = p.getAverageScore();
             double totalScore = progressVal + avgScoreVal;
 
-            // createdAt trong UserProgress: nếu bạn có field createdAt thì dùng, không thì fallback lastUpdatedAt
             Date ts = null;
             try {
-                // nếu entity có getCreatedAt()
                 ts = (Date) p.getClass().getMethod("getCreatedAt").invoke(p);
             } catch (Exception ignored) {
             }
@@ -122,14 +120,15 @@ public class LeaderboardService {
             rows.add(r);
         }
 
-        // Sort: sortKey desc (tương đương totalScore desc, cùng điểm thì createdAt asc)
+        // 5. Sort theo sortKey desc
         rows.sort((a, b) -> Double.compare(b.sortKey, a.sortKey));
 
-        // Tính rank giống $rank: cùng sortKey -> cùng rank
         List<Leaderboard> snapshots = new ArrayList<>();
         double lastSortKey = Double.NaN;
         int lastRank = 0;
         int index = 0;
+
+        int notified = 0; // đếm số user được gửi notify
 
         for (RowTmp r : rows) {
             index++;
@@ -141,8 +140,7 @@ public class LeaderboardService {
                 lastRank = rank;
                 lastSortKey = sk;
             } else {
-                // cùng sortKey => cùng rank
-                rank = lastRank;
+                rank = lastRank; // cùng sortKey -> cùng rank
             }
 
             UserProgress up = r.progress;
@@ -151,7 +149,7 @@ public class LeaderboardService {
 
             User user = userMap.get(userId);
 
-            // Tìm row cũ để update, nếu không có thì tạo mới
+            // row leaderboard hiện tại (nếu đã có)
             Leaderboard lb = leaderboardRepository
                     .findByUserIdAndSubjectIdAndPeriod(userId, subjectId, period);
             if (lb == null) {
@@ -161,6 +159,9 @@ public class LeaderboardService {
                 lb.setPeriod(period);
             }
 
+            // oldRank trước khi update
+            Integer oldRank = prevRank.get(userId);
+
             lb.setUserName(user != null ? user.getFullname() : "Người dùng");
             lb.setUserAvatar(user != null ? user.getAvatar() : null);
             lb.setSubjectName(subject.getName());
@@ -168,17 +169,42 @@ public class LeaderboardService {
             lb.setProgress(up.getProgress());
             lb.setAverageScore(up.getAverageScore());
             lb.setTotalScore(r.totalScore);
-            lb.setCompletedQuizzes(up.getCompletedQuizzes()); // int
-            lb.setCompletedTopics(up.getCompletedTopics());   // int
+            lb.setCompletedQuizzes(up.getCompletedQuizzes());
+            lb.setCompletedTopics(up.getCompletedTopics());
             lb.setRank(rank);
-            lb.setPreviousRank(prevRank.getOrDefault(userId, null));
-            lb.setProgressCreatedAt(up.getLastUpdatedAt() != null ? up.getLastUpdatedAt() : new Date());
+            lb.setPreviousRank(oldRank); // có thể null, field nên là Integer
+            lb.setProgressCreatedAt(
+                    up.getLastUpdatedAt() != null ? up.getLastUpdatedAt() : new Date()
+            );
             lb.setUpdatedAt(new Date());
 
             snapshots.add(lb);
+
+            // ==== GỌI THÔNG BÁO NẾU THỨ HẠNG THAY ĐỔI ====
+            if (oldRank != null && !oldRank.equals(rank)) {
+                try {
+                    notificationService.notifyRankChanged(
+                            RankChangedParams.builder()
+                                    .userId(userId)
+                                    .subjectId(subjectId)
+                                    .subjectName(subject.getName())
+                                    .period(period)       // "daily" | "weekly" | "monthly" | "alltime"
+                                    .oldRank(oldRank)
+                                    .newRank(rank)
+                                    .persist(true)        // lưu DB
+                                    .email(true)          // nếu không muốn gửi mail thì để false
+                                    .build()
+                    );
+                    notified++;
+                } catch (Exception ex) {
+                    // tránh làm fail cả transaction chỉ vì lỗi gửi thông báo
+                    // có thể log warn ở đây
+                    // log.warn("Failed to send rank-change notification for user {}", userId, ex);
+                }
+            }
         }
 
-        // Xoá những leaderboard rows không còn trong snapshot
+        // 6. Xoá những row không còn trong snapshot
         Set<String> keepUserIds = snapshots.stream()
                 .map(Leaderboard::getUserId)
                 .collect(Collectors.toSet());
@@ -189,12 +215,10 @@ public class LeaderboardService {
             leaderboardRepository.deleteBySubjectIdAndPeriod(subjectId, period);
         }
 
-        // Lưu lại snapshot mới
+        // 7. Lưu snapshot mới
         leaderboardRepository.saveAll(snapshots);
 
-        // Phần notifyRankChanged bên Node mình để notified = 0 (nếu sau này bạn có NotificationService thì thêm vào đây)
-        int notified = 0;
-
+        // 8. Trả về kết quả
         return Map.of(
                 "subjectId", subjectId,
                 "period", period,

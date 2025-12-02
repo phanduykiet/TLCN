@@ -37,3 +37,13 @@ cloudinary:
 es:
   node: ${ES_NODE:https://my-elasticsearch-project-ccf89e.es.us-central1.gcp.elastic.cloud:443}
   apiKey: ${ES_API_KEY:QzVGbm5Kb0JhSHZDNjRFa296UDk6NkcxTVRjNTY5MzkzQ3ZNLVlTdXFjdw==}
+
+# ======== ZALOPAY SANDBOX =========
+zalopay:
+  app-id: ${ZP_APP_ID:2554}
+  key1: ${ZP_KEY1:sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn}
+  create-endpoint: ${ZP_CREATE_ENDPOINT:https://sb-openapi.zalopay.vn/v2/create}
+  query-endpoint: ${ZP_QUERY_ENDPOINT:https://sb-openapi.zalopay.vn/v2/query}
+
+scifun:
+  client-url: ${CLIENT_URL:http://localhost:3000}
