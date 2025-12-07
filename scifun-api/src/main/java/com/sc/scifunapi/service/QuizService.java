@@ -441,11 +441,10 @@ public class QuizService {
             }
         }
 
-        // (nếu muốn cho update questionCount, có thể mở thêm đoạn này)
-        // if (data.containsKey("questionCount")) {
-        //     int qCount = Integer.parseInt(data.get("questionCount").toString());
-        //     quiz.setQuestionCount(qCount);
-        // }
+         if (data.containsKey("questionCount")) {
+             int qCount = Integer.parseInt(data.get("questionCount").toString());
+             quiz.setQuestionCount(qCount);
+         }
 
         Quiz saved = quizRepository.save(quiz);
 

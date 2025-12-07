@@ -80,39 +80,58 @@ public class QuizSubmissionService {
         for (Map<String, Object> ans : answersRaw) {
 
             String qId = ans.get("questionId").toString();
-            String selectedAnswerId = ans.get("selectedAnswerId") != null
-                    ? ans.get("selectedAnswerId").toString()
-                    : null;
+            List<String> selectedAnswerIds = null;
+
+            Object multi = ans.get("selectedAnswerIds");
+            if (multi instanceof List<?>) {
+                selectedAnswerIds = ((List<?>) multi).stream()
+                        .filter(Objects::nonNull)
+                        .map(Object::toString)
+                        .collect(Collectors.toList());
+            }
+
+            if (selectedAnswerIds == null) {
+                Object single = ans.get("selectedAnswerId");
+                if (single != null) {
+                    selectedAnswerIds = List.of(single.toString());
+                } else {
+                    selectedAnswerIds = Collections.emptyList();
+                }
+            }
+
 
             Question q = qMap.get(qId);
             boolean isCorrect = false;
 
-            if (q != null && selectedAnswerId != null) {
-                if (q.getAnswers() != null) {
-                    for (Question.Answer opt : q.getAnswers()) {
-                        // so sánh theo id của Answer trong embedded list
-                        if (opt.getId() != null
-                                && opt.getId().equals(selectedAnswerId)
-                                && opt.isCorrect()) {
-                            isCorrect = true;
-                            break;
-                        }
-                    }
-                }
+            if (q != null && selectedAnswerIds != null && !selectedAnswerIds.isEmpty() && q.getAnswers() != null) {
+                // Tập các đáp án đúng của câu hỏi
+                Set<String> correctIds = q.getAnswers().stream()
+                        .filter(a -> a.isCorrect())
+                        .map(a -> a.getId())
+                        .collect(Collectors.toSet());
+
+                // Tập các đáp án user chọn
+                Set<String> selectedSet = new HashSet<>(selectedAnswerIds);
+
+                // Quy tắc chấm: đúng khi chọn KHỚP 100% (không thiếu, không thừa)
+                isCorrect = !correctIds.isEmpty() && selectedSet.equals(correctIds);
             }
 
+
             if (isCorrect) correctCount++;
+
 
             // Tạo Question ref chỉ với id (DBRef)
             Question qRef = new Question();
             qRef.setId(qId);
 
             Submission.AnswerDetail detail = Submission.AnswerDetail.builder()
-                    .id(new ObjectId().toString())          // _id riêng cho từng answer
+                    .id(new ObjectId().toString())
                     .question(qRef)
-                    .selectedAnswer(selectedAnswerId)
+                    .selectedAnswers(selectedAnswerIds)
                     .isCorrect(isCorrect)
                     .build();
+
 
             detailedAnswers.add(detail);
         }
@@ -203,12 +222,12 @@ public class QuizSubmissionService {
 
         Quiz quiz = submission.getQuiz();
 
-        // build quiz summary giống style Express (simple thôi)
         Map<String, Object> quizMap = buildQuizSummary(quiz);
 
         List<Map<String, Object>> answerDetails = new ArrayList<>();
 
         for (Submission.AnswerDetail a : submission.getAnswers()) {
+
             Question question = a.getQuestion();
             if (question == null) continue;
 
@@ -216,14 +235,23 @@ public class QuizSubmissionService {
                     ? question.getAnswers()
                     : List.of();
 
-            // text đáp án user chọn
-            String selectedAnswerText = allAnswers.stream()
-                    .filter(opt -> opt.getId().equals(a.getSelectedAnswer()))
-                    .map(Question.Answer::getText)
-                    .findFirst()
-                    .orElse(a.getSelectedAnswer());
+            // ====== LẤY SELECTED ANSWERS (ID) ======
+            List<String> selectedIds = a.getSelectedAnswers() != null
+                    ? a.getSelectedAnswers()
+                    : List.of(); // Nếu submission cũ
 
-            // tất cả đáp án đúng
+            // Lấy text đáp án user chọn
+            List<String> selectedTexts = allAnswers.stream()
+                    .filter(opt -> selectedIds.contains(opt.getId()))
+                    .map(Question.Answer::getText)
+                    .toList();
+
+            // Nếu không map được text (có thể dữ liệu cũ), fallback sang ID
+            if (selectedTexts.isEmpty()) {
+                selectedTexts = selectedIds;
+            }
+
+            // ====== LẤY TẤT CẢ ĐÁP ÁN ĐÚNG ======
             List<String> correctAnswers = allAnswers.stream()
                     .filter(Question.Answer::isCorrect)
                     .map(Question.Answer::getText)
@@ -232,7 +260,7 @@ public class QuizSubmissionService {
             Map<String, Object> m = new HashMap<>();
             m.put("questionId", question.getId());
             m.put("questionText", question.getText());
-            m.put("selectedAnswer", selectedAnswerText);
+            m.put("selectedAnswers", selectedTexts);  // === GIỜ LÀ LIST ===
             m.put("correctAnswers", correctAnswers);
             m.put("isCorrect", a.isCorrect());
             m.put("explanation", question.getExplanation());
@@ -248,6 +276,7 @@ public class QuizSubmissionService {
 
         return res;
     }
+
 
     // helper build quiz map gọn gàng
     private Map<String, Object> buildQuizSummary(Quiz quiz) {

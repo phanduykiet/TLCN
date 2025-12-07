@@ -39,7 +39,9 @@ public class Submission {
         @DBRef
         private Question question;
 
-        private String selectedAnswer;
+        // NEW: nhiều đáp án user chọn
+        private List<String> selectedAnswers;
+
         private boolean isCorrect;
     }
 
