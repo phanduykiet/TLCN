@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,6 +29,46 @@ public class NotificationService {
 
     @Value("${client.url:http://localhost:3000}")
     private String clientUrl;
+
+    public Map<String, Object> getNotifications(String userId, int page, int limit) {
+
+        if (page <= 0) page = 1;
+        if (limit <= 0) limit = 20;
+
+        int skip = (page - 1) * limit;
+
+        List<Notification> list = notificationRepository
+                .findByUserIdOrderByCreatedAtDesc(userId, skip, limit);
+
+        long total = notificationRepository.countByUserId(userId);
+
+        return Map.of(
+                "items", list,
+                "pagination", Map.of(
+                        "page", page,
+                        "limit", limit,
+                        "total", total,
+                        "totalPages", (int) Math.ceil((double) total / limit)
+                )
+        );
+    }
+
+    public Notification markAsRead(String notificationId, String userId) {
+        Notification noti = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new RuntimeException("Thông báo không tồn tại"));
+
+        // Chỉ cho phép owner được sửa (hoặc em có thể cho ADMIN override luôn)
+        if (!noti.getUserId().equals(userId)) {
+            throw new RuntimeException("Bạn không có quyền cập nhật thông báo này");
+        }
+
+        if (!noti.isRead()) {
+            noti.setRead(true);
+            noti = notificationRepository.save(noti);
+        }
+
+        return noti;
+    }
 
     /**
      * Thông báo khi thứ hạng thay đổi (tương đương notifyRankChanged bên TS)

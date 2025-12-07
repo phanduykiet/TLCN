@@ -17,6 +17,24 @@ public class QuizController {
 
     private final QuizService quizService;
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/sync-all-quizzes-es")
+    public ResponseEntity<Map<String, Object>> syncAllQuizzesToES() {
+        try {
+            quizService.reindexAllQuizzes();
+            return ResponseEntity.ok(Map.of(
+                    "status", 200,
+                    "message", "Đồng bộ lại toàn bộ Quiz lên Elasticsearch thành công"
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "status", 500,
+                    "message", "Lỗi khi đồng bộ Elasticsearch: " + e.getMessage()
+            ));
+        }
+    }
+
+
     // Thêm Quiz
     @PostMapping("/create-quiz")
     @PreAuthorize("hasRole('ADMIN')")

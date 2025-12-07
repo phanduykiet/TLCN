@@ -167,4 +167,36 @@ public class SubjectService {
             throw new RuntimeException("Lỗi khi truy vấn Elasticsearch: " + e.getMessage());
         }
     }
+
+    // API nội bộ: xoá hết & sync lại toàn bộ Subject từ DB lên ES
+    public void reindexAllSubjects() {
+        // 1. Xoá toàn bộ document trong index "subjects"
+        try {
+            esClient.deleteByQuery(b -> b
+                    .index(SUBJECT_INDEX)
+                    .query(q -> q.matchAll(m -> m))
+                    .refresh(true)
+            );
+        } catch (IOException e) {
+            throw new RuntimeException("Elasticsearch deleteAll error: " + e.getMessage());
+        }
+
+        // 2. Lấy toàn bộ Subject từ DB
+        Iterable<Subject> allSubjects = subjectRepository.findAll();
+
+        // 3. Index lại từng subject
+        for (Subject s : allSubjects) {
+            Map<String, Object> doc = subjectSearchService.buildDocFromSubject(s);
+            try {
+                esClient.index(i -> i
+                        .index(SUBJECT_INDEX)
+                        .id(s.getId())
+                        .document(doc)
+                        .refresh(co.elastic.clients.elasticsearch._types.Refresh.True)
+                );
+            } catch (IOException e) {
+                throw new RuntimeException("Elasticsearch index error for subjectId=" + s.getId());
+            }
+        }
+    }
 }

@@ -2,6 +2,7 @@ package com.sc.scifunapi.service;
 
 import com.sc.scifunapi.entity.*;
 import com.sc.scifunapi.enums.SubscriptionStatus;
+import com.sc.scifunapi.enums.SubscriptionTier;
 import com.sc.scifunapi.repository.QuestionRepository;
 import com.sc.scifunapi.repository.QuizRepository;
 import com.sc.scifunapi.repository.UserRepository;
@@ -111,9 +112,9 @@ public class QuestionService {
 
         boolean isPro =
                 sub.getStatus() == SubscriptionStatus.ACTIVE &&
-                        "PRO".equals(sub.getTier()) &&
+                        sub.getTier() == SubscriptionTier.PRO &&
                         sub.getCurrentPeriodEnd() != null &&
-                        sub.getCurrentPeriodEnd().after(new Date());
+                        sub.getCurrentPeriodEnd().getTime() > System.currentTimeMillis();
 
         if (!isPro) {
             throw new RuntimeException("Tài khoản của bạn chưa có gói PRO hoặc đã hết hạn");

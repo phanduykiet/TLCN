@@ -305,4 +305,36 @@ public class TopicService {
         topicSearchService.deleteOneTopicFromES(id);
     }
 
+    // ✅ Xóa toàn bộ & sync lại tất cả topic từ DB lên ES
+    public void reindexAllTopics() {
+        // 1. Xóa toàn bộ document trong index "topics"
+        try {
+            esClient.deleteByQuery(b -> b
+                    .index(TOPIC_INDEX)
+                    .query(q -> q.matchAll(m -> m))
+                    .refresh(true)
+            );
+        } catch (IOException e) {
+            throw new RuntimeException("Elasticsearch deleteAll error: " + e.getMessage());
+        }
+
+        // 2. Lấy toàn bộ topic từ DB
+        Iterable<Topic> allTopics = topicRepository.findAll();
+
+        // 3. Index lại từng topic
+        for (Topic topic : allTopics) {
+            Map<String, Object> doc = topicSearchService.buildDocFromTopic(topic);
+            try {
+                esClient.index(i -> i
+                        .index(TOPIC_INDEX)
+                        .id(topic.getId())
+                        .document(doc)
+                        .refresh(co.elastic.clients.elasticsearch._types.Refresh.True)
+                );
+            } catch (IOException e) {
+                throw new RuntimeException("Elasticsearch index error for topicId=" + topic.getId());
+            }
+        }
+    }
+
 }

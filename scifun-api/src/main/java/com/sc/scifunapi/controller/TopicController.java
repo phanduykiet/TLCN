@@ -15,6 +15,24 @@ public class TopicController {
 
     private final TopicService topicService;
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/sync-all-topics-es")
+    public ResponseEntity<?> syncAllTopicsToES() {
+        try {
+            topicService.reindexAllTopics();
+            return ResponseEntity.ok(Map.of(
+                    "status", 200,
+                    "message", "Đồng bộ lại toàn bộ Topic lên Elasticsearch thành công"
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "status", 500,
+                    "message", "Lỗi khi đồng bộ Elasticsearch: " + e.getMessage()
+            ));
+        }
+    }
+
+
     // Tạo chủ đề (ADMIN)
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create-topic")
