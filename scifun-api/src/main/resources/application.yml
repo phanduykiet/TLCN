@@ -25,7 +25,7 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:G7k!4xR9z@Wq2vH#bM8sY*1pF&uT0dL^jC3eQ%Nw6aS!oVhZ}
-    expiresSeconds: ${JWT_EXPIRES_SECONDS:3600}   # 3600s = 1h
+    expiresSeconds: ${JWT_EXPIRES_SECONDS:86400}
 
 # ==== Cloudinary ====
 cloudinary:
