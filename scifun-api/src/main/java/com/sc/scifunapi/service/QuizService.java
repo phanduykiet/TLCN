@@ -1,6 +1,7 @@
 package com.sc.scifunapi.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.Refresh;
 import com.sc.scifunapi.dto.quiz.QuizDetailDTO;
 import com.sc.scifunapi.dto.quiz.TopicSimpleDTO;
 import com.sc.scifunapi.entity.Quiz;
@@ -440,11 +441,10 @@ public class QuizService {
             }
         }
 
-        // (nếu muốn cho update questionCount, có thể mở thêm đoạn này)
-        // if (data.containsKey("questionCount")) {
-        //     int qCount = Integer.parseInt(data.get("questionCount").toString());
-        //     quiz.setQuestionCount(qCount);
-        // }
+         if (data.containsKey("questionCount")) {
+             int qCount = Integer.parseInt(data.get("questionCount").toString());
+             quiz.setQuestionCount(qCount);
+         }
 
         Quiz saved = quizRepository.save(quiz);
 
@@ -512,5 +512,36 @@ public class QuizService {
         return res;
     }
 
+    // ✅ Xóa toàn bộ & sync lại tất cả quiz từ DB lên ES
+    public void reindexAllQuizzes() {
+        // 1. Xoá toàn bộ document trong index "quizzes"
+        try {
+            esClient.deleteByQuery(b -> b
+                    .index(QUIZ_INDEX)
+                    .query(q -> q.matchAll(m -> m))
+                    .refresh(true)
+            );
+        } catch (IOException e) {
+            throw new RuntimeException("Elasticsearch deleteAll error: " + e.getMessage());
+        }
+
+        // 2. Lấy toàn bộ quiz từ DB
+        Iterable<Quiz> allQuizzes = quizRepository.findAll();
+
+        // 3. Index lại từng quiz
+        for (Quiz quiz : allQuizzes) {
+            Map<String, Object> doc = quizSearchService.buildDocFromQuiz(quiz);
+            try {
+                esClient.index(i -> i
+                        .index(QUIZ_INDEX)
+                        .id(quiz.getId())
+                        .document(doc)
+                        .refresh(Refresh.True)
+                );
+            } catch (IOException e) {
+                throw new RuntimeException("Elasticsearch index error for quizId=" + quiz.getId());
+            }
+        }
+    }
 
 }

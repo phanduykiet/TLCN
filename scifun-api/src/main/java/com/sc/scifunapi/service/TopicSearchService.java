@@ -23,6 +23,27 @@ public class TopicSearchService {
 
     private static final String TOPIC_INDEX = "topics";
 
+    // Dùng chung logic build doc từ Topic
+    public Map<String, Object> buildDocFromTopic(Topic topic) {
+        Subject subject = topic.getSubject(); // có thể null
+
+        Map<String, Object> subjectMap = null;
+        if (subject != null) {
+            subjectMap = new HashMap<>();
+            subjectMap.put("_id", subject.getId());
+            subjectMap.put("name", subject.getName() != null ? subject.getName() : "");
+            subjectMap.put("description", subject.getDescription() != null ? subject.getDescription() : "");
+            subjectMap.put("image", subject.getImage() != null ? subject.getImage() : "");
+        }
+
+        Map<String, Object> doc = new HashMap<>();
+        doc.put("name", topic.getName());
+        doc.put("description", topic.getDescription() != null ? topic.getDescription() : "");
+        doc.put("subject", subjectMap);
+
+        return doc;
+    }
+
     // Sync 1 topic lên ES (dùng cho create và update)
     public void syncOneTopicToES(String topicId) {
         Topic topic = topicRepository.findById(topicId)

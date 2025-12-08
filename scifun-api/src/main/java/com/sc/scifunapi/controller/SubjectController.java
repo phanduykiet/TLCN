@@ -19,6 +19,25 @@ public class SubjectController {
 
     private final SubjectService subjectService;
 
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/sync-all-subjects-es")
+    public ResponseEntity<?> syncAllSubjectsToES() {
+        try {
+            subjectService.reindexAllSubjects();
+            return ResponseEntity.ok(Map.of(
+                    "status", 200,
+                    "message", "Đồng bộ lại toàn bộ Subject lên Elasticsearch thành công"
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "status", 500,
+                    "message", "Lỗi khi đồng bộ Elasticsearch: " + e.getMessage()
+            ));
+        }
+    }
+
+
     // Tạo môn học
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping(value = "/create-subject", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

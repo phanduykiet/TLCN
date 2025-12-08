@@ -20,6 +20,17 @@ public class SubjectSearchService {
 
     private static final String SUBJECT_INDEX = "subjects";
 
+    // Dùng chung logic build doc
+    public Map<String, Object> buildDocFromSubject(Subject s) {
+        Map<String, Object> doc = new HashMap<>();
+        doc.put("name", s.getName());
+        doc.put("description", s.getDescription() != null ? s.getDescription() : "");
+        doc.put("maxTopics", s.getMaxTopics() != null ? s.getMaxTopics() : 20);
+        doc.put("image", s.getImage() != null ? s.getImage()
+                : "https://res.cloudinary.com/dglm2f7sr/image/upload/v1761400287/default_gdfbhs.png");
+        return doc;
+    }
+
     // Sync 1 subject lên ES (create/update)
     public void syncOneSubjectToES(String subjectId) {
         Subject s = subjectRepository.findById(subjectId)

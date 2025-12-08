@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-@Document(collection = "submission")
+@Document(collection = "submissions")
 @Data
 @Builder
 @NoArgsConstructor
@@ -39,7 +39,9 @@ public class Submission {
         @DBRef
         private Question question;
 
-        private String selectedAnswer;
+        // NEW: nhiều đáp án user chọn
+        private List<String> selectedAnswers;
+
         private boolean isCorrect;
     }
 
