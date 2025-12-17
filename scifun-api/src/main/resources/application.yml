@@ -1,31 +1,39 @@
 server:
-  port: 5000
+  port: ${PORT:5000}
 
 spring:
   security:
     user:
       name: scifunapp
       password: password123
+
   mail:
     host: smtp.gmail.com
     port: 587
-    username: phanduykiet29@gmail.com
-    password: nali prpa izdp pvrq
+    username: ${MAIL_USERNAME:phanduykiet29@gmail.com}
+    password: ${MAIL_PASSWORD:nali prpa izdp pvrq}
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
+
   data:
     mongodb:
-      uri: mongodb://localhost:27017/scifun_db
+      uri: ${MONGODB_URI:mongodb://localhost:27017/scifun_db}
 
-# ==== JWT (dùng cho JwtUtil) ====
+# ==== JWT ====
 app:
   jwt:
     secret: ${JWT_SECRET:G7k!4xR9z@Wq2vH#bM8sY*1pF&uT0dL^jC3eQ%Nw6aS!oVhZ}
     expiresSeconds: ${JWT_EXPIRES_SECONDS:86400}
+
+logging:
+  level:
+    org.springframework.web.socket: DEBUG
+    org.springframework.messaging: DEBUG
+    org.springframework.messaging.simp.stomp: DEBUG
 
 # ==== Cloudinary ====
 cloudinary:
@@ -38,12 +46,13 @@ es:
   node: ${ES_NODE:https://my-elasticsearch-project-f1dc11.es.us-central1.gcp.elastic.cloud:443}
   apiKey: ${ES_API_KEY:R2hrVTlKb0IzYVZQTUc1ZlZQTXI6Wnd1UUVtbUJYblYwRjBOOFUzVndqUQ==}
 
-# ======== ZALOPAY SANDBOX =========
+# ==== ZaloPay Sandbox ====
 zalopay:
   app-id: ${ZP_APP_ID:2554}
   key1: ${ZP_KEY1:sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn}
   create-endpoint: ${ZP_CREATE_ENDPOINT:https://sb-openapi.zalopay.vn/v2/create}
   query-endpoint: ${ZP_QUERY_ENDPOINT:https://sb-openapi.zalopay.vn/v2/query}
 
+# ==== Client ====
 scifun:
   client-url: ${CLIENT_URL:http://localhost:3000}

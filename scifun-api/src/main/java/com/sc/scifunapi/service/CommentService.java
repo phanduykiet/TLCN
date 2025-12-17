@@ -1,49 +1,132 @@
-// src/main/java/com/sc/scifunapi/service/CommentService.java
 package com.sc.scifunapi.service;
 
+import com.sc.scifunapi.dto.comment.CommentDto;
 import com.sc.scifunapi.entity.Comment;
+import com.sc.scifunapi.entity.Notification;
+import com.sc.scifunapi.entity.User;
+import com.sc.scifunapi.enums.NotificationType;
+import com.sc.scifunapi.repository.NotificationRepository;
+import com.sc.scifunapi.repository.UserRepository;
 import com.sc.scifunapi.repository.CommentRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.*;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class CommentService {
 
     private final CommentRepository commentRepository;
+    private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    // Lấy danh sách bình luận gốc (parentId = null) với phân trang
-    public Map<String, Object> listRootComments(int page, int limit) {
+    public CommentService(CommentRepository commentRepository, UserRepository userRepository, NotificationRepository notificationRepository,
+                          SimpMessagingTemplate messagingTemplate) {
+        this.commentRepository = commentRepository;
+        this.userRepository = userRepository;
+        this.notificationRepository = notificationRepository;
+        this.messagingTemplate = messagingTemplate;
+    }
 
-        // Giống logic Express:
-        // page >= 1, limit từ 1–100
-        page = Math.max(page, 1);
-        limit = Math.min(Math.max(limit, 1), 100);
+    @Transactional
+    public CommentDto createComment(String userId, String content, String parentId) {
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("Nội dung bình luận không được trống");
+        }
 
-        Pageable pageable = PageRequest.of(
-                page - 1,
-                limit,
-                Sort.by(Sort.Direction.DESC, "createdAt")  // sort { createdAt: -1 }
+        // 1) Nếu là reply: lấy parent để:
+        // - tăng repliesCount
+        // - xác định user bị reply
+        Comment parent = null;
+        String repliedUserId = null;
+
+        if (parentId != null && !parentId.isBlank()) {
+            parent = commentRepository.findById(parentId)
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy bình luận cha (parentId)"));
+
+            repliedUserId = parent.getUserId();
+
+            // tăng repliesCount cho comment cha
+            parent.setRepliesCount(parent.getRepliesCount() + 1);
+            parent.setUpdatedAt(new Date());
+            commentRepository.save(parent);
+        }
+
+        var u = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
+        // 2) Tạo comment mới
+        Date now = new Date();
+        Comment newComment = Comment.builder()
+                .userId(userId)
+                .userName(u.getFullname())
+                .userAvatar(u.getAvatar())
+                .content(content.trim())
+                .parentId((parentId != null && !parentId.isBlank()) ? parentId : null)
+                .repliesCount(0)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+
+        Comment saved = commentRepository.save(newComment);
+
+        // Nếu là reply và không tự reply chính mình -> tạo notification + push realtime
+        if (repliedUserId != null
+                && !repliedUserId.isBlank()
+                && !repliedUserId.equals(userId)) {
+
+            String preview = saved.getContent();
+            if (preview != null && preview.length() > 80) {
+                preview = preview.substring(0, 80) + "...";
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", "comment_reply");
+            data.put("commentId", saved.getId());
+            data.put("parentId", saved.getParentId());
+            data.put("fromUserId", userId);
+
+            Notification noti = Notification.builder()
+                    .userId(repliedUserId)
+                    .type(NotificationType.COMMENT_REPLY)   // đảm bảo enum có COMMENT_REPLY
+                    .title("Bạn có phản hồi mới")
+                    .message(preview != null ? preview : "Có người đã phản hồi bình luận của bạn.")
+                    .data(data)
+                    .link("/comments/" + saved.getId())      // em đổi theo routing app
+                    .isRead(false)
+                    .createdAt(new Date())
+                    .build();
+
+            Notification savedNoti = notificationRepository.save(noti);
+
+            // Push realtime đến đúng user (giống cách em làm comment reply)
+            messagingTemplate.convertAndSendToUser(
+                    savedNoti.getUserId(),
+                    "/queue/notifications",
+                    savedNoti
+            );
+        }
+
+
+        return toDto(saved, repliedUserId);
+    }
+
+    private CommentDto toDto(Comment c, String repliedUserId) {
+        return new CommentDto(
+                c.getId(),
+                c.getUserId(),
+                c.getUserName(),
+                c.getUserAvatar(),
+                c.getContent(),
+                c.getParentId(),
+                c.getRepliesCount(),
+                c.getCreatedAt(),
+                c.getUpdatedAt(),
+                repliedUserId
         );
-
-        Page<Comment> commentPage = commentRepository.findByParentIdIsNull(pageable);
-
-        long total = commentPage.getTotalElements();
-        int totalPages = commentPage.getTotalPages();
-        boolean hasMore = (long) page * limit < total;
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("items", commentPage.getContent());
-        data.put("page", page);
-        data.put("limit", limit);
-        data.put("total", total);
-        data.put("totalPages", totalPages);
-        data.put("hasMore", hasMore);
-
-        return data;
     }
 }
+

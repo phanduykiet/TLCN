@@ -11,6 +11,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -24,8 +25,8 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
-    private final WebSocketService webSocketService;
     private final MailService emailService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Value("${client.url:http://localhost:3000}")
     private String clientUrl;
@@ -91,20 +92,7 @@ public class NotificationService {
         String change = newRank < oldRank ? "up" : "down";
         int diff = Math.abs(newRank - oldRank);
 
-        // 1) Realtime qua WebSocket
-        webSocketService.emitRankChangeToUser(
-                userId,
-                RankChangePayload.builder()
-                        .subjectId(subjectId)
-                        .subjectName(subjectName)
-                        .period(period)
-                        .oldRank(oldRank)
-                        .newRank(newRank)
-                        .change(change)
-                        .build()
-        );
-
-        // 2) Lưu DB
+        // 1) Lưu DB
         if (persist) {
             Notification notification = Notification.builder()
                     .userId(userId)
@@ -128,7 +116,14 @@ public class NotificationService {
                     .createdAt(new Date())
                     .build();
 
-            notificationRepository.save(notification);
+            Notification saved = notificationRepository.save(notification);
+
+            // 2) realtime duy nhất
+            messagingTemplate.convertAndSendToUser(
+                    userId,
+                    "/queue/notifications",
+                    saved
+            );
         }
 
         // 3) Gửi email text
@@ -154,59 +149,6 @@ public class NotificationService {
                                     newRank
                             ),
                             "Xem bảng xếp hạng: " + clientUrl + "/leaderboard"
-                    );
-
-                    emailService.sendMail(user.getEmail(), subjectMail, body);
-                }
-            }
-        }
-    }
-
-    /**
-     * Thông báo khi có người reply comment (tương đương notifyCommentReply bên TS)
-     */
-    public void notifyCommentReply(CommentReplyParams params) {
-        String targetUserId = params.getTargetUserId();
-        String fromUserName = params.getFromUserName();
-        String content = params.getContent();
-        String commentId = params.getCommentId();
-        String parentId = params.getParentId();
-        boolean persist = params.getPersist() == null ? true : params.getPersist();
-        boolean email = params.getEmail() == null ? false : params.getEmail();
-
-        // 1) Lưu DB
-        if (persist) {
-            Notification notification = Notification.builder()
-                    .userId(targetUserId)
-                    .type(NotificationType.COMMENT_REPLY)
-                    .title("Có phản hồi mới 💬")
-                    .message(String.format("%s vừa trả lời bình luận của bạn: \"%s\"", fromUserName, content))
-                    .data(Map.of(
-                            "commentId", commentId,
-                            "parentId", parentId
-                    ))
-                    .link("/#comments")
-                    .isRead(false)
-                    .createdAt(new Date())
-                    .build();
-
-            notificationRepository.save(notification);
-        }
-
-        // 2) Gửi email (nếu bật)
-        if (email) {
-            Optional<User> optUser = userRepository.findById(targetUserId);
-            if (optUser.isPresent()) {
-                User user = optUser.get();
-                if (user.getEmail() != null && !user.getEmail().isBlank()) {
-                    String subjectMail =
-                            String.format("[Quiz App] %s đã phản hồi bình luận của bạn", fromUserName);
-
-                    String body = String.join("\n",
-                            "Xin chào " + (user.getFullname() != null ? user.getFullname() : "bạn") + ",",
-                            String.format("%s vừa trả lời bình luận của bạn:", fromUserName),
-                            "\"" + content + "\"",
-                            "Xem phản hồi tại: " + clientUrl + "/#comments"
                     );
 
                     emailService.sendMail(user.getEmail(), subjectMail, body);

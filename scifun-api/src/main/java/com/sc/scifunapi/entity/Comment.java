@@ -19,7 +19,7 @@ public class Comment {
     private String id;
 
     @Indexed
-    private String userId;       // ref User
+    private String userId;
 
     private String userName;
 
