@@ -21,7 +21,7 @@ spring:
 
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://localhost:27017/scifun_db}
+      uri: ${MONGODB_URI:mongodb://host.docker.internal:27017/scifun_db}
 
 # ==== JWT ====
 app:
