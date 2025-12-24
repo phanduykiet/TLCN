@@ -6,11 +6,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.Optional;
+
 public interface CommentRepository extends MongoRepository<Comment, String> {
 
-    // comment gốc (parentId = null)
     Page<Comment> findByParentIdIsNull(Pageable pageable);
 
-    // comment con theo parent
     Page<Comment> findByParentId(String parentId, Pageable pageable);
+
+    Optional<Comment> findById(String id);
 }

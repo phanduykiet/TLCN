@@ -19,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.Map;
 
 @RestController
@@ -43,8 +44,12 @@ public class BillingController {
                     : "guest";
 
             double planPrice = 0.0;
+            int durationDays = 0;
             if (body.get("price") != null) {
                 planPrice = Double.parseDouble(body.get("price").toString());
+            }
+            if (body.get("durationDays") != null) {
+                durationDays = Integer.parseInt(body.get("durationDays").toString());
             }
 
             // Gọi service tạo order ZaloPay
@@ -82,7 +87,7 @@ public class BillingController {
             resp.put("payUrl", zlpRes.getOrderUrl());
             resp.put("appTransId", zlpRes.getAppTransId());
             resp.put("orderId", order.getId());
-            resp.put("mac", zlpRes.getMac());
+            resp.put("durationDays", durationDays);
 
             return ResponseEntity.ok(resp);
 
@@ -108,7 +113,7 @@ public class BillingController {
     }
 
     @PostMapping("/zalopay/verifyPayment")
-    public ResponseEntity<?> verifyPayment(@RequestBody VerifyPaymentRequest req) {
+    public ResponseEntity<?> verifyPayment(@RequestBody VerifyPaymentRequest req, Principal principal) {
         try {
             if (req.appTransId == null || req.appTransId.isBlank()) {
                 return ResponseEntity.badRequest().body(
@@ -116,7 +121,8 @@ public class BillingController {
                 );
             }
 
-            int returnCode = (req.returnCode != null) ? req.returnCode : 1;
+            int returnCode = zaloPayService.queryReturnCode(req.appTransId);
+
             int durationDays = (req.durationDays != null) ? req.durationDays : 30;
 
             PaymentResult result = zaloPayService.applyPaymentIfSuccess(
@@ -151,4 +157,5 @@ public class BillingController {
             );
         }
     }
+
 }

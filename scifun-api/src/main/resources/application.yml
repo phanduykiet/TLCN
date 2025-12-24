@@ -1,5 +1,5 @@
 server:
-  port: ${PORT:5000}
+  port: ${PORT}
 
 spring:
   security:
@@ -7,27 +7,22 @@ spring:
       name: scifunapp
       password: password123
 
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${MAIL_USERNAME:phanduykiet29@gmail.com}
-    password: ${MAIL_PASSWORD:nali prpa izdp pvrq}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://host.docker.internal:27017/scifun_db}
+      uri: ${MONGODB_URI}
 
-# ==== JWT ====
+# ==== JWT ANA MAIL====
 app:
   jwt:
-    secret: ${JWT_SECRET:G7k!4xR9z@Wq2vH#bM8sY*1pF&uT0dL^jC3eQ%Nw6aS!oVhZ}
-    expiresSeconds: ${JWT_EXPIRES_SECONDS:86400}
+    secret: ${JWT_SECRET}
+    expiresSeconds: ${JWT_EXPIRES_SECONDS}
+
+  sendgrid:
+    apiKey: ${SENDGRID_API_KEY}
+
+  mail:
+    from: ${MAIL_FROM}
+
 
 logging:
   level:
@@ -37,22 +32,22 @@ logging:
 
 # ==== Cloudinary ====
 cloudinary:
-  cloud_name: ${CLOUDINARY_CLOUD_NAME:dglm2f7sr}
-  api_key: ${CLOUDINARY_API_KEY:616287875981434}
-  api_secret: ${CLOUDINARY_API_SECRET:WRKcek7fKoyzFe8iLeB6kMTTB8c}
+  cloud_name: ${CLOUDINARY_CLOUD_NAME}
+  api_key: ${CLOUDINARY_API_KEY}
+  api_secret: ${CLOUDINARY_API_SECRET}
 
 # ==== Elastic ====
 es:
-  node: ${ES_NODE:https://my-elasticsearch-project-f1dc11.es.us-central1.gcp.elastic.cloud:443}
-  apiKey: ${ES_API_KEY:R2hrVTlKb0IzYVZQTUc1ZlZQTXI6Wnd1UUVtbUJYblYwRjBOOFUzVndqUQ==}
+  node: ${ES_NODE}
+  apiKey: ${ES_API_KEY}
 
 # ==== ZaloPay Sandbox ====
 zalopay:
-  app-id: ${ZP_APP_ID:2554}
-  key1: ${ZP_KEY1:sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn}
-  create-endpoint: ${ZP_CREATE_ENDPOINT:https://sb-openapi.zalopay.vn/v2/create}
-  query-endpoint: ${ZP_QUERY_ENDPOINT:https://sb-openapi.zalopay.vn/v2/query}
+  app-id: ${ZP_APP_ID}
+  key1: ${ZP_KEY1}
+  create-endpoint: ${ZP_CREATE_ENDPOINT}
+  query-endpoint: ${ZP_QUERY_ENDPOINT}
 
 # ==== Client ====
 scifun:
-  client-url: ${CLIENT_URL:http://localhost:3000}
+  client-url: ${CLIENT_URL}

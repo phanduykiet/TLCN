@@ -9,11 +9,17 @@ import com.sc.scifunapi.enums.*;
 import com.sc.scifunapi.repository.OrderRepository;
 import com.sc.scifunapi.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.cloudinary.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -37,6 +43,9 @@ public class ZaloPayService {
 
     @Value("${zalopay.create-endpoint}")
     private String createEndpoint;
+
+    @Value("${scifun.client-url}")
+    private String clientUrl;
 
     // ========== Helper ==========
 
@@ -67,6 +76,60 @@ public class ZaloPayService {
         return yymmdd + "_" + rand;
     }
 
+    public int queryReturnCode(String appTransId) {
+        try {
+            // 1. Tạo MAC
+            String data = appId + "|" + appTransId + "|" + key1;
+            String mac = hmacSha256(data, key1);
+
+            // 2. Tạo JSON payload
+            JSONObject payload = new JSONObject();
+            payload.put("app_id", Integer.parseInt(appId));
+            payload.put("app_trans_id", appTransId);
+            payload.put("mac", mac);
+
+            // 3. Gọi API
+            URL url = new URL("https://sb-openapi.zalopay.vn/v2/query");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+
+            // 4. Gửi request
+            OutputStream os = conn.getOutputStream();
+            os.write(payload.toString().getBytes("UTF-8"));
+            os.flush();
+            os.close();
+
+            // 5. Đọc response
+            int responseCode = conn.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+
+                // 6. Parse JSON và lấy return_code
+                JSONObject jsonResponse = new JSONObject(response.toString());
+                int returnCode = jsonResponse.getInt("return_code");
+
+                return returnCode;
+            } else {
+                System.err.println("HTTP Error: " + responseCode);
+                return -1; // Hoặc throw exception
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1; // Hoặc throw exception
+        }
+    }
+
     // ========== 1. Tạo order ZaloPay ==========
 
     public ZlpCreateOrderResponse createOrder(double amount, String userId) throws Exception {
@@ -75,7 +138,7 @@ public class ZaloPayService {
         String appUser = (userId != null && !userId.isBlank()) ? userId : "guest";
 
         String embedData = objectMapper.writeValueAsString(
-                Map.of("redirecturl", "https://your-client-url.com/premium")
+                Map.of("redirecturl", clientUrl)
         );
 
         String item = "[]";

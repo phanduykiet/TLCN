@@ -1,6 +1,7 @@
 package com.sc.scifunapi.service;
 
 import com.sc.scifunapi.dto.comment.CommentDto;
+import com.sc.scifunapi.dto.comment.PagedCommentsResponse;
 import com.sc.scifunapi.entity.Comment;
 import com.sc.scifunapi.entity.Notification;
 import com.sc.scifunapi.entity.User;
@@ -8,6 +9,9 @@ import com.sc.scifunapi.enums.NotificationType;
 import com.sc.scifunapi.repository.NotificationRepository;
 import com.sc.scifunapi.repository.UserRepository;
 import com.sc.scifunapi.repository.CommentRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +34,69 @@ public class CommentService {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.messagingTemplate = messagingTemplate;
+    }
+
+    public PagedCommentsResponse listRootComments(int page, int limit) {
+        int safePage = Math.max(page, 1);
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+
+        PageRequest pageable = PageRequest.of(
+                safePage - 1,
+                safeLimit,
+                Sort.by(Sort.Direction.DESC, "createdAt") // root: mới -> cũ
+        );
+
+        Page<Comment> result = commentRepository.findByParentIdIsNull(pageable);
+
+        long total = result.getTotalElements();
+        int totalPages = result.getTotalPages();
+        boolean hasMore = safePage * safeLimit < total;
+
+        return new PagedCommentsResponse(
+                null,
+                result.getContent(),
+                safePage,
+                safeLimit,
+                total,
+                totalPages,
+                hasMore
+        );
+    }
+
+    public PagedCommentsResponse listReplies(String parentId, int page, int limit) {
+        int safePage = Math.max(page, 1);
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+
+        // (tuỳ chọn) kiểm tra tồn tại comment cha
+        commentRepository.findById(parentId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy comment cha"));
+
+        PageRequest pageable = PageRequest.of(
+                safePage - 1,
+                safeLimit,
+                Sort.by(Sort.Direction.ASC, "createdAt") // replies: cũ -> mới
+        );
+
+        Page<Comment> result = commentRepository.findByParentId(parentId, pageable);
+
+        long total = result.getTotalElements();
+        int totalPages = result.getTotalPages();
+        boolean hasMore = safePage * safeLimit < total;
+
+        return new PagedCommentsResponse(
+                parentId,
+                result.getContent(),
+                safePage,
+                safeLimit,
+                total,
+                totalPages,
+                hasMore
+        );
+    }
+
+    public Comment getCommentDetail(String id) {
+        return commentRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy comment"));
     }
 
     @Transactional
