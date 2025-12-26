@@ -50,7 +50,8 @@ public class SecurityConfig {
                 "http://127.0.0.1:5500",
                 "http://localhost:5500",
                 "http://localhost:3000",
-                "http://192.168.11.124:3000"
+                "http://192.168.11.124:3000",
+                "https://admin-scifun.onrender.com"
         ));
 
         config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
