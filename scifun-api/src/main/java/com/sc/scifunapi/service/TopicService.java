@@ -34,7 +34,7 @@ public class TopicService {
 
         String name = data.get("name") != null ? data.get("name").toString() : null;
         String description = data.get("description") != null ? data.get("description").toString() : null;
-
+        String level = data.get("level") != null ? data.get("level").toString() : null;
         String subjectId = data.get("subject") != null ? data.get("subject").toString() : null;
 
         if (subjectId == null) {
@@ -49,6 +49,7 @@ public class TopicService {
         Topic topic = Topic.builder()
                 .name(name)
                 .description(description)
+                .level(level)
                 .subject(subject)   // <-- GÁN SUBJECT ENTITY, KHÔNG PHẢI STRING
                 .build();
 
@@ -59,6 +60,7 @@ public class TopicService {
         res.put("_id", saved.getId());
         res.put("name", saved.getName());
         res.put("description", saved.getDescription());
+        res.put("level", saved.getLevel());
         res.put("subject", Map.of(
                 "_id", subject.getId(),
                 "name", subject.getName(),
@@ -221,6 +223,7 @@ public class TopicService {
         res.put("_id", topic.getId());
         res.put("name", topic.getName());
         res.put("description", topic.getDescription());
+        res.put("level", topic.getLevel());
 
         if (subject != null) {
             Map<String, Object> subjectMap = new HashMap<>();
@@ -255,6 +258,10 @@ public class TopicService {
             topic.setDescription(data.get("description").toString());
         }
 
+        if (data.get("level") != null) {
+            topic.setLevel(data.get("level").toString());
+        }
+
         // update subject (nhận id subject)
         if (data.get("subject") != null) {
             String subjectId = data.get("subject").toString();
@@ -273,6 +280,7 @@ public class TopicService {
         res.put("_id", saved.getId());
         res.put("name", saved.getName());
         res.put("description", saved.getDescription());
+        res.put("level", saved.getLevel());
 
         Subject subject = saved.getSubject();
         if (subject != null) {

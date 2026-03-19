@@ -39,6 +39,7 @@ public class TopicSearchService {
         Map<String, Object> doc = new HashMap<>();
         doc.put("name", topic.getName());
         doc.put("description", topic.getDescription() != null ? topic.getDescription() : "");
+        doc.put("level", topic.getLevel());
         doc.put("subject", subjectMap);
 
         return doc;
@@ -56,6 +57,7 @@ public class TopicSearchService {
         doc.put("name", topic.getName());
         doc.put("description",
                 topic.getDescription() != null ? topic.getDescription() : "");
+        doc.put("level", topic.getLevel());
 
         doc.put("subject", subject == null ? null : Map.of(
                 "_id", subject.getId(),

@@ -14,4 +14,6 @@ public interface SubmissionRepository extends MongoRepository<Submission, String
     List<Submission> findByQuiz_Id(String quizId);
 
     List<Submission> findByUserIdAndQuiz_Id(String userId, String quizId);
+
+    void deleteByUserId(String userId);
 }

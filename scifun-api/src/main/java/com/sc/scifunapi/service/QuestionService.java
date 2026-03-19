@@ -1,5 +1,6 @@
 package com.sc.scifunapi.service;
 
+import com.opencsv.CSVReader;
 import com.sc.scifunapi.entity.*;
 import com.sc.scifunapi.enums.SubscriptionStatus;
 import com.sc.scifunapi.enums.SubscriptionTier;
@@ -12,8 +13,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Service
@@ -348,6 +352,69 @@ public class QuestionService {
         );
     }
 
+    public Map<String, Object> importQuestionsCsv(String quizId, MultipartFile file) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new RuntimeException("Quiz không tồn tại"));
+
+        List<Question> questions = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+
+        try (CSVReader reader = new CSVReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String[] headers = reader.readNext(); // bỏ dòng header
+            String[] line;
+            int row = 2;
+
+            while ((line = reader.readNext()) != null) {
+                try {
+                    if (line.length < 6) {
+                        errors.add("Dòng " + row + ": thiếu cột");
+                        row++;
+                        continue;
+                    }
+
+                    String text = line[0].trim();
+                    int correctIndex = Integer.parseInt(line[5].trim()); // 1-4
+                    String explanation = line.length > 6 ? line[6].trim() : null;
+
+                    List<Question.Answer> answers = new ArrayList<>();
+                    for (int i = 1; i <= 4; i++) {
+                        answers.add(Question.Answer.builder()
+                                .text(line[i].trim())
+                                .isCorrect(i == correctIndex)
+                                .build());
+                    }
+
+                    questions.add(Question.builder()
+                            .text(text)
+                            .quiz(quiz)
+                            .answers(answers)
+                            .explanation(explanation)
+                            .build());
+
+                } catch (Exception e) {
+                    errors.add("Dòng " + row + ": " + e.getMessage());
+                }
+                row++;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Đọc file CSV thất bại: " + e.getMessage());
+        }
+
+        if (questions.isEmpty()) {
+            throw new RuntimeException("Không có câu hỏi hợp lệ nào");
+        }
+
+        questionRepository.saveAll(questions);
+
+        // Cập nhật questionCount trong quiz
+        quiz.setQuestionCount(quiz.getQuestionCount() + questions.size());
+        quizRepository.save(quiz);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("imported", questions.size());
+        res.put("errors", errors);
+        return res;
+    }
 
 
 }

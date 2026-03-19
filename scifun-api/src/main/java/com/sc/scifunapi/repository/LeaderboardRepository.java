@@ -20,6 +20,8 @@ public interface LeaderboardRepository extends MongoRepository<Leaderboard, Stri
 
     void deleteBySubjectIdAndPeriod(String subjectId, String period);
 
+    void deleteByUserId(String userId);
+
     void deleteBySubjectIdAndPeriodAndUserIdNotIn(String subjectId, String period, Collection<String> userIds);
 
     // Lấy leaderboard theo subject + period, có phân trang

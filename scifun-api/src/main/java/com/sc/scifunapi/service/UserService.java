@@ -4,9 +4,10 @@ import com.sc.scifunapi.dto.user.LoginRequest;
 import com.sc.scifunapi.dto.user.RegisterRequest;
 import com.sc.scifunapi.entity.Subscription;
 import com.sc.scifunapi.entity.User;
+import com.sc.scifunapi.entity.UserOnboarding;
 import com.sc.scifunapi.enums.Role;
 import com.sc.scifunapi.enums.SubscriptionStatus;
-import com.sc.scifunapi.repository.UserRepository;
+import com.sc.scifunapi.repository.*;
 import com.sc.scifunapi.util.OtpUtil;
 import com.sc.scifunapi.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +34,12 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final CloudinaryService cloudinaryService;
+    private final UserProgressRepository userProgressRepository;
+    private final UserOnboardingRepository userOnboardingRepository;
+    private final SubmissionRepository submissionRepository;
+    private final ResultRepository resultRepository;
+    private final LeaderboardRepository leaderboardRepository;
+    private final FavoriteQuizRepository favoriteQuizRepository;
 
     // Đăng ký tài khoản kèm gửi OTP
     public Map<String, Object> register(RegisterRequest req) {
@@ -131,8 +135,26 @@ public class UserService {
         userData.put("dob", user.getDob());
         userData.put("sex", user.getSex());
         userData.put("subscription", user.getSubscription()); // có thể null/none
-
+        userData.put("isFirstLogin", user.isFirstLogin());
+        userData.put("level", getUserLevel(user.getId()));
+        var onboarding = userOnboardingRepository.findByUserId(user.getId()).orElse(null);
+        userData.put("level", onboarding != null ? onboarding.getLevel() : null);
+        markNotFirstLogin(user.getId());
         return Map.of("token", token, "user", userData);
+    }
+
+    public String getUserLevel(String userId) {
+        return userOnboardingRepository.findByUserId(userId)
+                .map(UserOnboarding::getLevel)
+                .orElse(null);
+    }
+
+    // Nếu đăng nhập lần 2 trở lên đổi isFirstLogin = false
+    public void markNotFirstLogin(String userId) {
+        userRepository.findById(userId).ifPresent(user -> {
+            user.setFirstLogin(false);
+            userRepository.save(user);
+        });
     }
 
     // Nếu có hạn và đã hết hạn -> chuyển về NONE
@@ -226,6 +248,14 @@ public class UserService {
             user.setAvatar(url);
         }
 
+        if (form.containsKey("level")) {
+            UserOnboarding onboarding = userOnboardingRepository.findByUserId(id)
+                    .orElse(UserOnboarding.builder().userId(id).build());
+            onboarding.setLevel(form.get("level"));
+            userOnboardingRepository.save(onboarding);
+        }
+
+
         return userRepository.save(user);
     }
 
@@ -288,7 +318,7 @@ public class UserService {
     }
 
     // Lấy chi tiết
-    public Map<String, Object> getInfoUser(String id, String authUserId) {
+    public Map<String, Object>  getInfoUser(String id, String authUserId) {
         // Chỉ cho phép xem chính mình
         if (authUserId == null || !id.equals(authUserId)) {
             throw new RuntimeException("Bạn không có quyền truy cập thông tin này");
@@ -297,17 +327,17 @@ public class UserService {
         var u = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
 
-        // Ẩn các trường nhạy cảm: -password -otp -otpExpires -__v -isVerified (theo Express)
-        return Map.of(
-                "id", u.getId(),
-                "email", u.getEmail(),
-                "fullname", u.getFullname(),
-                "avatar", u.getAvatar(),
-                "role", u.getRole(),
-                "dob", u.getDob(),
-                "sex", u.getSex(),
-                "subscription", u.getSubscription()
-        );
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", u.getId());
+        res.put("email", u.getEmail());
+        res.put("fullname", u.getFullname());
+        res.put("avatar", u.getAvatar());
+        res.put("role", u.getRole());
+        res.put("dob", u.getDob());
+        res.put("sex", u.getSex());
+        res.put("subscription", u.getSubscription());
+        res.put("level", getUserLevel(id)); // dùng lại hàm đã có
+        return res;
     }
 
     // Lấy danh sách người dùng có phân trang
@@ -356,5 +386,91 @@ public class UserService {
         result.put("limit", limit);
         result.put("totalPages", (int) Math.ceil(total / (double) limit));
         return result;
+    }
+
+    public Map<String, Object> refreshGuestToken(String userId) {
+        var user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản"));
+
+        // Guest đã hết hạn tài khoản (expiredAt) thì không refresh
+        if (user.getExpiredAt() != null && user.getExpiredAt().before(new Date())) {
+            userRepository.delete(user);
+            throw new RuntimeException("Phiên dùng thử đã hết hạn, vui lòng đăng ký tài khoản");
+        }
+
+        // Gia hạn thêm 30 ngày
+        user.setExpiredAt(new Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000));
+        userRepository.save(user);
+
+        String newToken = jwtUtil.generateGuestToken(user.getId(), user.getEmail());
+        return Map.of("token", newToken);
+    }
+
+    public Map<String, Object> createGuest() {
+        String guestId = UUID.randomUUID().toString();
+
+        User guest = User.builder()
+                .id(guestId)
+                .email(guestId + "@guest.local") // có id trước nên set email luôn được
+                .fullname("Guest User")
+                .role(Role.USER)
+                .isVerified(true)
+                .expiredAt(new Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
+                .build();
+
+        userRepository.save(guest);
+
+        String token = jwtUtil.generateGuestToken(guest.getId(), guest.getEmail());
+        boolean isFirstLogin = guest.isFirstLogin();
+        markNotFirstLogin(guest.getId());
+        return Map.of("token", token, "userId", guest.getId(), "isFisrtLogin", isFirstLogin);
+    }
+
+    public void deleteGuestUser(String userId) {
+        userProgressRepository.deleteByUserId(userId);
+        userOnboardingRepository.deleteByUserId(userId);
+        submissionRepository.deleteByUserId(userId);
+        resultRepository.deleteByUserId(userId);
+        leaderboardRepository.deleteByUserId(userId);
+        favoriteQuizRepository.deleteByUser(userId);
+        userRepository.deleteById(userId);
+    }
+
+    public Map<String, Object> convertGuestToUser(String userId, RegisterRequest req) {
+        // Kiểm tra email đã tồn tại chưa (tránh trùng với user thật khác)
+        userRepository.findByEmail(req.getEmail()).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new RuntimeException("Email đã được sử dụng, vui lòng dùng email khác");
+            }
+        });
+
+        User guest = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy phiên khách"));
+
+        // Cập nhật thông tin
+        guest.setEmail(req.getEmail());
+        guest.setFullname(req.getFullname() != null ? req.getFullname() : "New User");
+        guest.setPassword(passwordEncoder.encode(req.getPassword()));
+        guest.setOtp(OtpUtil.generateOTP());
+        guest.setOtpExpires(new Date(System.currentTimeMillis() + 5 * 60 * 1000));
+        guest.setVerified(false);       // chờ xác thực OTP
+        guest.setExpiredAt(null);       // ← convert thành user thật
+
+        userRepository.save(guest);
+
+        // Gửi OTP
+        mailService.sendMail(
+                guest.getEmail(),
+                "OTP xác thực đăng ký",
+                "Mã OTP của bạn là: " + guest.getOtp()
+        );
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", guest.getId());
+        res.put("email", guest.getEmail());
+        res.put("fullname", guest.getFullname());
+        res.put("isVerified", guest.isVerified());
+        res.put("role", guest.getRole());
+        return res;
     }
 }

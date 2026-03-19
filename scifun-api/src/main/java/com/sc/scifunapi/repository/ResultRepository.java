@@ -16,4 +16,6 @@ public interface ResultRepository extends MongoRepository<Result, String> {
     List<Result> findByQuiz_Id(String quizId);
 
     long countByQuiz_Id(String quizId);
+
+    void deleteByUserId(String userId);
 }

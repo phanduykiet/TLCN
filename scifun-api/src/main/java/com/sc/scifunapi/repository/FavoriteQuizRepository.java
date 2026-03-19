@@ -14,6 +14,8 @@ public interface FavoriteQuizRepository extends MongoRepository<FavoriteQuiz, St
 
     Optional<FavoriteQuiz> findByUserAndQuiz(String user, String quiz);
 
+    void deleteByUser(String userId);
+
     void deleteByUserAndQuiz(String user, String quiz);
 
     // Dùng cho list

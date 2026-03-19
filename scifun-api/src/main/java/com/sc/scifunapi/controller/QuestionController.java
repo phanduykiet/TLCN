@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -27,6 +28,26 @@ public class QuestionController {
                     "status", 200,
                     "message", "Thêm thành công",
                     "data", question
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", 400,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/import-questions/{quizId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> importQuestions(
+            @PathVariable String quizId,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            var result = questionService.importQuestionsCsv(quizId, file);
+            return ResponseEntity.ok(Map.of(
+                    "status", 200,
+                    "message", "Import thành công",
+                    "data", result
             ));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of(

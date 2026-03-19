@@ -1,6 +1,8 @@
 package com.sc.scifunapi.middleware;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sc.scifunapi.repository.UserRepository;
+import com.sc.scifunapi.service.UserService;
 import com.sc.scifunapi.util.JwtUtil;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +29,8 @@ import java.util.Map;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository; // thêm mới
+    private final UserService userService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
@@ -42,6 +47,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         try {
             var claims = jwtUtil.parseToken(token);
+            var userId = claims.get("userId", String.class);
+
+            // ── Check expiredAt cho guest ──────────────────────────
+            var user = userRepository.findById(userId).orElse(null);
+            if (user != null && user.getExpiredAt() != null) {
+                if (user.getExpiredAt().before(new Date())) {
+                    userService.deleteGuestUser(user.getId()); // ← thay dòng cũ
+                    sendError(res, 401, "Phiên dùng thử đã hết hạn, vui lòng đăng ký tài khoản");
+                    return;
+                }
+            }
+            // ───────────────────────────────────────────────────────
+
             var role = claims.get("role", String.class);
             var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
@@ -51,13 +69,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     authorities
             );
 
-            authentication.setDetails(claims.get("userId", String.class));
+            authentication.setDetails(userId);
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
             chain.doFilter(req, res);
 
         } catch (ExpiredJwtException e) {
-            sendError(res, 401, "Token đã hết hạn, vui lòng đăng nhập lại");
+            Boolean isGuest = e.getClaims().get("isGuest", Boolean.class);
+            if (Boolean.TRUE.equals(isGuest)) {
+                sendError(res, 401, "GUEST_TOKEN_EXPIRED"); // client tự gọi refresh
+            } else {
+                sendError(res, 401, "Token đã hết hạn, vui lòng đăng nhập lại");
+            }
         } catch (JwtException | BadCredentialsException e) {
             sendError(res, 400, "Token không hợp lệ");
         } catch (AuthenticationCredentialsNotFoundException e) {
@@ -68,12 +91,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private void sendError(HttpServletResponse res, int status, String message) throws IOException {
         res.setStatus(status);
         res.setContentType("application/json;charset=UTF-8");
-
-        var body = Map.of(
-                "status", status,
-                "message", message
-        );
-
+        var body = Map.of("status", status, "message", message);
         var out = res.getOutputStream();
         new ObjectMapper().writeValue(out, body);
         out.flush();

@@ -23,6 +23,22 @@ public class JwtUtil {
     @Value("${app.jwt.expiresSeconds:3600}")
     private long expiresSeconds;
 
+    public String generateGuestToken(String userId, String email) {
+        Instant now = Instant.now();
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", userId);
+        claims.put("email", email);
+        claims.put("role", "USER");
+        claims.put("isGuest", true);
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setIssuedAt(Date.from(now))
+                .setExpiration(Date.from(now.plusSeconds(expiresSeconds)))
+                .signWith(jwtKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public String generateToken(String userId, String email, String role) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(expiresSeconds);

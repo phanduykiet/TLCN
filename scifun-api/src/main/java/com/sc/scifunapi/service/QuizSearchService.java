@@ -43,6 +43,7 @@ public class QuizSearchService {
             topicMap.put("_id", topic.getId());
             topicMap.put("name", topic.getName() != null ? topic.getName() : "");
             topicMap.put("description", topic.getDescription() != null ? topic.getDescription() : "");
+            topicMap.put("level", topic.getLevel() != null ? topic.getLevel() : "");
             topicMap.put("subject", subjectMap);
         }
 
@@ -83,6 +84,7 @@ public class QuizSearchService {
             topicMap.put("_id", topic.getId());
             topicMap.put("name", topic.getName() != null ? topic.getName() : "");
             topicMap.put("description", topic.getDescription() != null ? topic.getDescription() : "");
+            topicMap.put("level", topic.getLevel() != null ? topic.getLevel() : "");
             topicMap.put("subject", subjectMap);
         }
 

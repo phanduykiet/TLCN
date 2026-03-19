@@ -89,13 +89,14 @@ public class QuizController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) Double timeWeight,
-            @RequestParam(required = false) Double popularityWeight
+            @RequestParam(required = false) Double popularityWeight,
+            @RequestParam(required = false) String subId
     ) {
         try {
             double tw = timeWeight != null ? timeWeight : 0.6;
             double pw = popularityWeight != null ? popularityWeight : 0.4;
 
-            Map<String, Object> data = quizService.getTrendingQuizzes(page, limit, tw, pw);
+            Map<String, Object> data = quizService.getTrendingQuizzes(page, limit, tw, pw, subId);
 
             return ResponseEntity.ok(Map.of(
                     "status", 200,

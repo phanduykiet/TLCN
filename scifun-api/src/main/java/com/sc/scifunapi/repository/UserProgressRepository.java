@@ -15,4 +15,6 @@ public interface UserProgressRepository extends MongoRepository<UserProgress, St
     List<UserProgress> findByUserId(String userId);
 
     List<UserProgress> findBySubjectId(String subjectId);
+
+    void deleteByUserId(String userId);
 }

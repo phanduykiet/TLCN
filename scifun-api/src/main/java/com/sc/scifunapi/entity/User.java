@@ -51,4 +51,12 @@ public class User {
     private Subscription subscription = Subscription.builder()
             .status(SubscriptionStatus.NONE)
             .build();
+
+    @Builder.Default
+    private boolean isFirstLogin = true;
+
+    @Builder.Default
+    private Date createdAt = new Date();
+
+    private Date expiredAt; // null = user thật | now + 30 ngày = guest
 }

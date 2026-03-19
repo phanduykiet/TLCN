@@ -19,6 +19,8 @@ public class Topic {
 
     private String description;
 
+    private String level;
+
     // Liên kết với Subject
     @DBRef(lazy = true)
     private Subject subject;

@@ -244,7 +244,8 @@ public class QuizService {
             int page,
             int limit,
             double timeWeight,
-            double popularityWeight
+            double popularityWeight,
+            String subjectId
     ) {
         int skip = (page - 1) * limit;
 
@@ -255,6 +256,13 @@ public class QuizService {
         Date epoch = new Date(0L);
         List<Quiz> quizzes = allQuizzes.stream()
                 .filter(q -> q.getLastAttemptAt() != null && !q.getLastAttemptAt().equals(epoch))
+                .filter(q -> {
+                    if (subjectId == null || subjectId.isBlank()) return true; // không filter
+                    if (q.getTopic() == null) return false;
+                    Topic topic = q.getTopic(); // DBRef lazy load tại đây
+                    if (topic.getSubject() == null) return false;
+                    return subjectId.equals(topic.getSubject().getId());
+                })
                 .toList();
 
         if (quizzes.isEmpty()) {
@@ -325,15 +333,39 @@ public class QuizService {
             item.put("_id", q.getId());
             item.put("title", q.getTitle());
             item.put("description", q.getDescription());
-            item.put("topic", q.getTopic());             // nếu @DBRef Topic thì Jackson tự serialize
             item.put("duration", q.getDuration());
             item.put("questionCount", q.getQuestionCount());
             item.put("uniqueUserCount", q.getUniqueUserCount());
             item.put("lastAttemptAt", q.getLastAttemptAt());
             item.put("score", Math.round(qs.score * 100.0) / 100.0);
+            item.put("accessTier", q.getAccessTier() != null ? q.getAccessTier().name() : "FREE"); // thêm mới
+
+            // Map topic thủ công, tránh bị serialize thừa target/source
+            if (q.getTopic() != null) {
+                Topic t = q.getTopic();
+                Map<String, Object> topicMap = new HashMap<>();
+                topicMap.put("id", t.getId());
+                topicMap.put("name", t.getName());
+                topicMap.put("description", t.getDescription());
+                topicMap.put("level", t.getLevel());
+
+                // Map subject trong topic
+                if (t.getSubject() != null) {
+                    Map<String, Object> subjectMap = new HashMap<>();
+                    subjectMap.put("id", t.getSubject().getId());
+                    subjectMap.put("name", t.getSubject().getName());
+                    subjectMap.put("description", t.getSubject().getDescription());
+                    subjectMap.put("image", t.getSubject().getImage());
+                    topicMap.put("subject", subjectMap);
+                }
+
+                item.put("topic", topicMap);
+            } else {
+                item.put("topic", null);
+            }
+
             dataList.add(item);
         }
-
         Map<String, Object> res = new HashMap<>();
         res.put("page", page);
         res.put("limit", limit);
@@ -360,6 +392,7 @@ public class QuizService {
                 topic.getId(),
                 topic.getName(),
                 topic.getDescription(),
+                topic.getLevel(),
                 subject != null ? subject.getId() : null
         );
 

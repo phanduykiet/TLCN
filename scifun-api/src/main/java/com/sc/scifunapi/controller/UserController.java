@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -62,6 +63,7 @@ public class UserController {
     public ResponseEntity<?> login(@RequestBody LoginRequest body) {
         try {
             var result = userService.login(body); // { token, user }
+
             return ResponseEntity.ok(Map.of(
                     "status", 200,
                     "message", "Đăng nhập thành công",
@@ -121,8 +123,8 @@ public class UserController {
             @RequestBody Map<String, String> body
     ) {
         try {
-            String oldPassword     = body.get("oldPassword");
-            String newPassword     = body.get("newPassword");
+            String oldPassword = body.get("oldPassword");
+            String newPassword = body.get("newPassword");
             String confirmPassword = body.get("confirmPassword"); // giữ đúng chữ, không thêm validate
 
             userService.updatePassword(id, oldPassword, newPassword, confirmPassword);
@@ -154,17 +156,17 @@ public class UserController {
             User updated = userService.updateUser(id, form, avatar, authUserId);
 
             // sanitize trả về giống select("-password -otp -otpExpires")
-            Map<String, Object> data = Map.of(
-                    "id", updated.getId(),
-                    "email", updated.getEmail(),
-                    "fullname", updated.getFullname(),
-                    "isVerified", updated.isVerified(),
-                    "avatar", updated.getAvatar(),
-                    "role", updated.getRole(),
-                    "dob", updated.getDob(),
-                    "sex", updated.getSex(),
-                    "subscription", updated.getSubscription()
-            );
+            Map<String, Object> data = new HashMap<>();
+            data.put("id", updated.getId());
+            data.put("email", updated.getEmail());
+            data.put("fullname", updated.getFullname());
+            data.put("isVerified", updated.isVerified());
+            data.put("avatar", updated.getAvatar());
+            data.put("role", updated.getRole());
+            data.put("dob", updated.getDob());
+            data.put("sex", updated.getSex());
+            data.put("subscription", updated.getSubscription());
+            data.put("level", userService.getUserLevel(updated.getId())); // thêm mới
 
             return ResponseEntity.ok(Map.of(
                     "status", 200,
@@ -276,4 +278,52 @@ public class UserController {
         }
     }
 
+    @PostMapping("/guest/refresh")
+    public ResponseEntity<?> refreshGuest(@RequestBody Map<String, String> body) {
+        try {
+            var data = userService.refreshGuestToken(body.get("userId"));
+            return ResponseEntity.ok(Map.of("status", 200, "data", data));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(401).body(Map.of("status", 401, "message", ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/guest")
+    public ResponseEntity<?> createGuest() {
+        try {
+            var data = userService.createGuest();
+            return ResponseEntity.ok(Map.of(
+                    "status", 200,
+                    "message", "Tạo phiên khách thành công",
+                    "data", data
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(400).body(Map.of(
+                    "status", 400,
+                    "message", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/guest/convert")
+    public ResponseEntity<?> convertGuest(@RequestBody RegisterRequest body) {
+        try {
+            // Lấy userId từ token hiện tại
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            String userId = (String) auth.getDetails();
+
+            var data = userService.convertGuestToUser(userId, body);
+            return ResponseEntity.ok(Map.of(
+                    "status", 200,
+                    "message", "Vui lòng kiểm tra email để lấy OTP xác thực",
+                    "data", data
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(400).body(Map.of(
+                    "status", 400,
+                    "message", ex.getMessage()
+            ));
+        }
+
+    }
 }
