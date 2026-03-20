@@ -1,16 +1,10 @@
 package com.sc.scifunapi.controller;
 
-import com.sc.scifunapi.dto.zalo.ZlpCreateOrderResponse;
+import com.sc.scifunapi.dto.momo.MomoCreateOrderResponse;
 import com.sc.scifunapi.entity.Order;
-import com.sc.scifunapi.enums.Currency;
-import com.sc.scifunapi.enums.OrderStatus;
-import com.sc.scifunapi.enums.OrderType;
-import com.sc.scifunapi.enums.PaymentResult;
-import com.sc.scifunapi.enums.Period;
-import com.sc.scifunapi.enums.PlanTier;
-import com.sc.scifunapi.enums.Provider;
+import com.sc.scifunapi.enums.*;
 import com.sc.scifunapi.repository.OrderRepository;
-import com.sc.scifunapi.service.ZaloPayService;
+import com.sc.scifunapi.service.MomoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +13,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.Map;
 
 @RestController
@@ -27,66 +20,51 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class BillingController {
 
-    private final ZaloPayService zaloPayService;
+    private final MomoService momoService;
     private final OrderRepository orderRepository;
 
-    @Value("${zalopay.app-id}")
-    private Integer zaloAppId;
+    @Value("${momo.access-key}")      // ← THÊM field này
+    private String momoAccessKey;
 
-    // ================== TẠO ĐƠN ZALOPAY ==================
+    @Value("${momo.secret-key}")
+    private String momoSecretKey;
+
+    // ── 1. Tạo đơn MoMo ──────────────────────────────────────────
     @PostMapping("/checkout")
     @PreAuthorize("hasAnyRole('ADMIN','USER')")
     public ResponseEntity<?> createCheckout(@RequestBody Map<String, Object> body) {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             String userId = (auth != null && auth.getDetails() != null)
-                    ? auth.getDetails().toString()
-                    : "guest";
+                    ? auth.getDetails().toString() : "guest";
 
-            double planPrice = 0.0;
-            int durationDays = 0;
-            if (body.get("price") != null) {
-                planPrice = Double.parseDouble(body.get("price").toString());
-            }
-            if (body.get("durationDays") != null) {
-                durationDays = Integer.parseInt(body.get("durationDays").toString());
-            }
+            double planPrice  = body.get("price") != null
+                    ? Double.parseDouble(body.get("price").toString()) : 0;
+            int durationDays  = body.get("durationDays") != null
+                    ? Integer.parseInt(body.get("durationDays").toString()) : 30;
 
-            // Gọi service tạo order ZaloPay
-            ZlpCreateOrderResponse zlpRes = zaloPayService.createOrder(planPrice, userId);
+            MomoCreateOrderResponse momoRes = momoService.createOrder(planPrice, userId);
 
-            // check returnCode
-            if (zlpRes.getReturnCode() != 1) {
-                return ResponseEntity.badRequest().body(
-                        Map.of(
-                                "status", 400,
-                                "message", "Tạo thanh toán ZaloPay thất bại",
-                                "return_message", zlpRes.getReturnMessage()
-                        )
-                );
-            }
-
-            // Lưu Order PENDING
+            // Lưu order PENDING
             Order order = Order.builder()
                     .userId(userId)
                     .type(OrderType.SUBSCRIPTION)
                     .total(planPrice)
                     .currency(Currency.VND)
-                    .provider(Provider.ZALOPAY)
-                    .providerRef(zlpRes.getAppTransId())
+                    .provider(Provider.MOMO)
+                    .providerRef(momoRes.getOrderId())   // orderId MoMo sinh ra
                     .status(OrderStatus.PENDING)
                     .planTier(PlanTier.PRO)
                     .period(Period.month)
                     .build();
-
             orderRepository.save(order);
 
-            // Tạo response map (cho phép value null)
             Map<String, Object> resp = new java.util.HashMap<>();
-            resp.put("provider", "ZALOPAY");
-            resp.put("payUrl", zlpRes.getOrderUrl());
-            resp.put("appTransId", zlpRes.getAppTransId());
-            resp.put("orderId", order.getId());
+            resp.put("provider",     "MOMO");
+            resp.put("payUrl",       momoRes.getPayUrl());     // mở webview/browser
+            resp.put("deeplink",     momoRes.getDeeplink());   // mở thẳng app MoMo
+            resp.put("qrCodeUrl",    momoRes.getQrCodeUrl());  // hiển thị QR
+            resp.put("orderId",      momoRes.getOrderId());
             resp.put("durationDays", durationDays);
 
             return ResponseEntity.ok(resp);
@@ -94,68 +72,60 @@ public class BillingController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(
-                    Map.of(
-                            "status", 500,
-                            "message", e.getMessage() != null ? e.getMessage() : e.getClass().getName()
-                    )
-            );
+                    Map.of("status", 500, "message",
+                            e.getMessage() != null ? e.getMessage() : e.getClass().getName()));
         }
     }
 
-
-    // ================== VERIFY PAYMENT ==================
-
-    // Body request verify
-    public static class VerifyPaymentRequest {
-        public String appTransId;
-        public Integer returnCode;
-        public Integer durationDays;
-    }
-
-    @PostMapping("/zalopay/verifyPayment")
-    public ResponseEntity<?> verifyPayment(@RequestBody VerifyPaymentRequest req, Principal principal) {
+    // ── 2. IPN — MoMo gọi về tự động sau khi thanh toán ─────────
+    // KHÔNG cần auth vì MoMo server gọi thẳng vào đây
+    @PostMapping("/momo/ipn")
+    public ResponseEntity<?> momoIpn(@RequestBody Map<String, Object> payload) {
         try {
-            if (req.appTransId == null || req.appTransId.isBlank()) {
-                return ResponseEntity.badRequest().body(
-                        Map.of("status", 400, "message", "Thiếu appTransId")
-                );
+            String orderId    = (String) payload.get("orderId");
+            String requestId  = (String) payload.get("requestId");
+            int    resultCode = Integer.parseInt(payload.get("resultCode").toString()); // ← parse an toàn hơn
+            long   amount     = Long.parseLong(payload.get("amount").toString());
+            String signature  = (String) payload.get("signature");
+
+            // Log để debug
+            System.out.println("=== MOMO IPN ===");
+            System.out.println("orderId: " + orderId);
+            System.out.println("resultCode: " + resultCode);
+            System.out.println("signature nhận: " + signature);
+
+            // Verify chữ ký — accessKey đã có đúng giá trị
+            String rawHash = "accessKey="    + momoAccessKey   // ← FIX: không còn trống
+                    + "&amount="       + amount
+                    + "&extraData="    + payload.getOrDefault("extraData", "")
+                    + "&message="      + payload.getOrDefault("message", "")
+                    + "&orderId="      + orderId
+                    + "&orderInfo="    + payload.getOrDefault("orderInfo", "")
+                    + "&orderType="    + payload.getOrDefault("orderType", "")
+                    + "&partnerCode="  + payload.getOrDefault("partnerCode", "")
+                    + "&payType="      + payload.getOrDefault("payType", "")
+                    + "&requestId="    + requestId
+                    + "&responseTime=" + payload.getOrDefault("responseTime", "")
+                    + "&resultCode="   + resultCode
+                    + "&transId="      + payload.getOrDefault("transId", "");
+
+            System.out.println("rawHash: " + rawHash);
+
+            String expectedSig = momoService.hmacSha256(rawHash, momoSecretKey);
+            System.out.println("signature expected: " + expectedSig);
+
+            if (!expectedSig.equals(signature)) {
+                System.out.println("=== SIGNATURE KHÔNG KHỚP ===");
+                return ResponseEntity.ok(Map.of("resultCode", 99, "message", "invalid signature"));
             }
 
-            int returnCode = zaloPayService.queryReturnCode(req.appTransId);
+            momoService.applyPaymentIfSuccess(orderId, resultCode, 30);
 
-            int durationDays = (req.durationDays != null) ? req.durationDays : 30;
-
-            PaymentResult result = zaloPayService.applyPaymentIfSuccess(
-                    req.appTransId,
-                    returnCode,
-                    durationDays
-            );
-
-            return switch (result) {
-                case PAID -> ResponseEntity.ok(
-                        Map.of("status", 200,
-                                "message", "Thanh toán thành công, user đã được nâng cấp PRO"));
-                case ALREADY_PAID -> ResponseEntity.ok(
-                        Map.of("status", 200,
-                                "message", "Đơn hàng này đã được thanh toán trước đó"));
-                case NOT_FOUND -> ResponseEntity.status(404).body(
-                        Map.of("status", 404,
-                                "message", "Không tìm thấy đơn hàng"));
-                case IGNORED_FAILED -> ResponseEntity.ok(
-                        Map.of("status", 200,
-                                "message", "Chưa hoàn thành thanh toán"));
-            };
+            return ResponseEntity.ok(Map.of("resultCode", 0, "message", "success"));
 
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(500).body(
-                    Map.of(
-                            "status", 500,
-                            "message", "Lỗi xác nhận thanh toán",
-                            "error", e.getMessage()
-                    )
-            );
+            return ResponseEntity.ok(Map.of("resultCode", 99, "message", e.getMessage()));
         }
     }
-
 }

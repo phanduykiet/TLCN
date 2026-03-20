@@ -416,5 +416,22 @@ public class QuestionService {
         return res;
     }
 
+    // Tìm câu hỏi liên quan theo keyword từ message user
+    public List<Map<String, Object>> findRelatedQuestions(String message) {
+        // Lấy từ khóa chính từ message (đơn giản: dùng thẳng message)
+        Pageable limit = PageRequest.of(0, 8); // lấy tối đa 8 câu
+        List<Question> questions = questionRepository.searchByKeyword(message, limit);
+
+        return questions.stream().map(q -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("text", q.getText());
+            item.put("explanation", q.getExplanation());
+            q.getAnswers().stream()
+                    .filter(Question.Answer::isCorrect)
+                    .findFirst()
+                    .ifPresent(a -> item.put("correctAnswer", a.getText()));
+            return item;
+        }).toList();
+    }
 
 }

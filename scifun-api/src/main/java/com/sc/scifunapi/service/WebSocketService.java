@@ -9,6 +9,5 @@ public class WebSocketService {
 
     public void emitRankChangeToUser(String userId, NotificationService.RankChangePayload payload) {
         // TODO: Implement WebSocket / Socket.io / STOMP ở đây nếu cần
-        // tạm thời để trống cho khỏi lỗi
     }
 }

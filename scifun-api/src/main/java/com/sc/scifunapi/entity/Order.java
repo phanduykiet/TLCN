@@ -28,7 +28,7 @@ public class Order {
 
     private Currency currency = Currency.VND;
 
-    private Provider provider = Provider.ZALOPAY;
+    private Provider provider = Provider.MOMO;
 
     @Field("providerRef")
     private String providerRef; // app_trans_id từ ZaloPay

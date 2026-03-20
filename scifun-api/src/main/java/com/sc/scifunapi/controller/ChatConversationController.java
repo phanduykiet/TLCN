@@ -28,28 +28,53 @@ public class ChatConversationController {
     }
 
     @PostMapping("/conversation")
-    public ResponseEntity<?> openChat(Principal principal) {
-        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getDetails();
+    public ResponseEntity<?> openChat(
+            @RequestParam(defaultValue = "HUMAN") String type) {
 
-        ChatConversation convo = conversationService.getOrCreateOpenConversation(userId);
+        String userId = (String) SecurityContextHolder.getContext()
+                .getAuthentication().getDetails();
+
+        // Chỉ USER mới được tạo room AI
+        if ("AI".equals(type)) {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            boolean isUser = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_USER"));
+            if (!isUser) {
+                return ResponseEntity.status(403).body(Map.of("message", "Chỉ USER mới chat được với AI"));
+            }
+        }
+
+        ChatConversation convo = conversationService.getOrCreateOpenConversation(userId, type);
 
         return ResponseEntity.ok(Map.of(
                 "conversationId", convo.getId(),
-                "status", convo.getStatus()
+                "status", convo.getStatus(),
+                "type", convo.getType()
         ));
     }
 
     @GetMapping("/conversations")
-    public ResponseEntity<?> listConversations(Authentication auth) {
+    public ResponseEntity<?> listConversations(
+            Authentication auth,
+            @RequestParam(required = false) String type) {
 
         boolean isAdmin = auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
-        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getDetails();
+        String userId = (String) SecurityContextHolder.getContext()
+                .getAuthentication().getDetails();
 
-        List<ChatConversation> items = isAdmin
-                ? conversationService.findAll()
-                : conversationService.findByUser(userId);
+        List<ChatConversation> items;
+
+        if (isAdmin) {
+            // Admin chỉ thấy HUMAN room
+            items = conversationService.findAllByType("HUMAN");
+        } else {
+            // User lọc theo type nếu có, không thì lấy tất cả
+            items = (type != null)
+                    ? conversationService.findByUserAndType(userId, type)
+                    : conversationService.findByUser(userId);
+        }
 
         return ResponseEntity.ok(items);
     }

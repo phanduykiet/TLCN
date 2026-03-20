@@ -6,7 +6,11 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDate;
+import java.time.Period;
+import java.time.ZoneId;
 import java.util.Date;
+
 
 @Data
 @NoArgsConstructor
@@ -59,4 +63,12 @@ public class User {
     private Date createdAt = new Date();
 
     private Date expiredAt; // null = user thật | now + 30 ngày = guest
+
+    public int getAge() {
+        if (this.dob == null) return 0;
+        return Period.between(
+                this.dob.toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
+                LocalDate.now()
+        ).getYears();
+    }
 }

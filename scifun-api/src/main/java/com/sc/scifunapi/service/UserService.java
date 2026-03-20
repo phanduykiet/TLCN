@@ -22,6 +22,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
@@ -40,6 +42,7 @@ public class UserService {
     private final ResultRepository resultRepository;
     private final LeaderboardRepository leaderboardRepository;
     private final FavoriteQuizRepository favoriteQuizRepository;
+    public record UserStatusResult(boolean isGuest) {}
 
     // Đăng ký tài khoản kèm gửi OTP
     public Map<String, Object> register(RegisterRequest req) {
@@ -323,6 +326,7 @@ public class UserService {
         if (authUserId == null || !id.equals(authUserId)) {
             throw new RuntimeException("Bạn không có quyền truy cập thông tin này");
         }
+        UserStatusResult userStatusResult = getStatus(authUserId);
 
         var u = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
@@ -336,8 +340,23 @@ public class UserService {
         res.put("dob", u.getDob());
         res.put("sex", u.getSex());
         res.put("subscription", u.getSubscription());
+        res.put("isGuest", userStatusResult.isGuest);
+        res.put("expiredAt", u.getExpiredAt() != null ? u.getExpiredAt() : null);
         res.put("level", getUserLevel(id)); // dùng lại hàm đã có
         return res;
+    }
+
+    public UserStatusResult getStatus(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        boolean isGuest = user.getEmail() != null
+                && user.getEmail().endsWith("@guest.local");
+        return new UserStatusResult(isGuest);
+    }
+
+    public User findById(String userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
     }
 
     // Lấy danh sách người dùng có phân trang
@@ -411,7 +430,7 @@ public class UserService {
 
         User guest = User.builder()
                 .id(guestId)
-                .email(guestId + "@guest.local") // có id trước nên set email luôn được
+                .email(guestId + "@guest.local")
                 .fullname("Guest User")
                 .role(Role.USER)
                 .isVerified(true)

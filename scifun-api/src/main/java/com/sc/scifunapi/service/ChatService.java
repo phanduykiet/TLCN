@@ -45,12 +45,12 @@ public class ChatService {
 
         Date now = new Date();
 
-        // ✅ Nếu conversationId chưa tồn tại thì tạo mới luôn (cho test-room-1 chạy được)
+        // ✅ Nếu conversationId chưa tồn tại thì tạo mới luôn
         ChatConversation convo = conversationRepo.findById(conversationId).orElse(null);
 
         if (convo == null) {
             convo = ChatConversation.builder()
-                    .id(conversationId)       // ⭐ cho phép set id theo chuỗi test-room-1
+                    .id(conversationId)       // cho phép set id theo chuỗi test-room-1
                     .userId(senderRole.equals("ADMIN") ? null : senderId)
                     .adminId(senderRole.equals("ADMIN") ? senderId : null)
                     .status("OPEN")

@@ -21,7 +21,10 @@ public class ChatConversation {
     private String userId;
 
     @Indexed
-    private String adminId;
+    private String adminId;       // null nếu là AI conversation
+
+    @Builder.Default
+    private String type = "HUMAN"; // "HUMAN" | "AI"
 
     @Builder.Default
     private String status = "OPEN";

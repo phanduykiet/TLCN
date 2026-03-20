@@ -4,6 +4,7 @@ import com.sc.scifunapi.dto.user.LoginRequest;
 import com.sc.scifunapi.dto.user.RegisterRequest;
 import com.sc.scifunapi.dto.user.VerifyOtpRequest;
 import com.sc.scifunapi.entity.User;
+import com.sc.scifunapi.repository.UserRepository;
 import com.sc.scifunapi.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -13,6 +14,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +25,7 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
 
     // Đăng ký tài khoản
     @PostMapping("/register")
@@ -324,6 +328,5 @@ public class UserController {
                     "message", ex.getMessage()
             ));
         }
-
     }
 }

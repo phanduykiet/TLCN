@@ -21,20 +21,27 @@ public class ChatConversationService {
         this.conversationRepo = conversationRepo;
     }
 
-    public ChatConversation getOrCreateOpenConversation(String userId) {
+    public List<ChatConversation> findByUserAndType(String userId, String type) {
+        return conversationRepo.findByUserIdAndTypeOrderByUpdatedAtDesc(userId, type);
+    }
 
+    public List<ChatConversation> findAllByType(String type) {
+        return conversationRepo.findByTypeOrderByUpdatedAtDesc(type);
+    }
+
+    public ChatConversation getOrCreateOpenConversation(String userId, String type) {
         return conversationRepo
-                .findFirstByUserIdAndStatusOrderByUpdatedAtDesc(userId, "OPEN")
-                .orElseGet(() -> {
-                    ChatConversation convo = ChatConversation.builder()
-                            .id(UUID.randomUUID().toString())   // ⭐ ID ngẫu nhiên
-                            .userId(userId)
-                            .status("OPEN")
-                            .createdAt(new Date())
-                            .updatedAt(new Date())
-                            .build();
-                    return conversationRepo.save(convo);
-                });
+                .findFirstByUserIdAndTypeAndStatusOrderByUpdatedAtDesc(userId, type, "OPEN")
+                .orElseGet(() -> conversationRepo.save(
+                        ChatConversation.builder()
+                                .id(UUID.randomUUID().toString())
+                                .userId(userId)
+                                .type(type)
+                                .status("OPEN")
+                                .createdAt(new Date())
+                                .updatedAt(new Date())
+                                .build()
+                ));
     }
 
     public List<ChatConversation> findByUser(String userId) {
