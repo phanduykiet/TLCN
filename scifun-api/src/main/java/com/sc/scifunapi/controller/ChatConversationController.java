@@ -1,5 +1,6 @@
 package com.sc.scifunapi.controller;
 
+import com.sc.scifunapi.dto.chat.ChatMessageDTO;
 import com.sc.scifunapi.entity.ChatConversation;
 import com.sc.scifunapi.entity.ChatMessage;
 import com.sc.scifunapi.repository.ChatMessageRepository;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -49,8 +51,7 @@ public class ChatConversationController {
         return ResponseEntity.ok(Map.of(
                 "conversationId", convo.getId(),
                 "status", convo.getStatus(),
-                "type", convo.getType()
-        ));
+                "type", convo.getType()));
     }
 
     @GetMapping("/conversations")
@@ -83,20 +84,27 @@ public class ChatConversationController {
     public ResponseEntity<?> getMessages(
             @PathVariable String conversationId,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int limit,
-            Authentication auth
-    ) {
-        ChatConversation convo = conversationService.getConversation(conversationId, auth);
+            @RequestParam(defaultValue = "10") int limit,
+            Authentication auth) {
 
-        Page<ChatMessage> messages = messageService.getMessages(conversationId, page, limit);
+        // Extract trên main thread TRƯỚC khi vào CompletableFuture
+        String userId = (String) auth.getDetails();
+
+        CompletableFuture<Void> authFuture = CompletableFuture
+                .runAsync(() -> conversationService.getConversation(conversationId, auth));
+
+        CompletableFuture<Page<ChatMessageDTO>> messagesFuture = CompletableFuture
+                .supplyAsync(() -> messageService.getMessagesTest(conversationId, page, limit));
+
+        CompletableFuture.allOf(authFuture, messagesFuture).join();
+
+        Page<ChatMessageDTO> messages = messagesFuture.join();
 
         return ResponseEntity.ok(Map.of(
                 "conversationId", conversationId,
                 "items", messages.getContent(),
                 "page", page,
-                "total", messages.getTotalElements()
-        ));
+                "total", messages.getTotalElements()));
     }
-
 
 }

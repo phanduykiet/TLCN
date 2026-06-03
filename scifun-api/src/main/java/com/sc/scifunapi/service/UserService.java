@@ -42,7 +42,9 @@ public class UserService {
     private final ResultRepository resultRepository;
     private final LeaderboardRepository leaderboardRepository;
     private final FavoriteQuizRepository favoriteQuizRepository;
-    public record UserStatusResult(boolean isGuest) {}
+
+    public record UserStatusResult(boolean isGuest) {
+    }
 
     // Đăng ký tài khoản kèm gửi OTP
     public Map<String, Object> register(RegisterRequest req) {
@@ -74,8 +76,7 @@ public class UserService {
         mailService.sendMail(
                 user.getEmail(),
                 "OTP xác thực đăng ký",
-                "Mã OTP của bạn là: " + user.getOtp()
-        );
+                "Mã OTP của bạn là: " + user.getOtp());
 
         userRepository.save(user);
 
@@ -102,8 +103,8 @@ public class UserService {
         }
 
         // Xác thực thành công
-        user.setVerified(true);       // field boolean isVerified -> setter là setVerified(...)
-        user.setOtp("");              // xoá OTP
+        user.setVerified(true); // field boolean isVerified -> setter là setVerified(...)
+        user.setOtp(""); // xoá OTP
         user.setOtpExpires(new Date(0)); // xoá hạn
         userRepository.save(user);
     }
@@ -189,8 +190,7 @@ public class UserService {
         mailService.sendMail(
                 email,
                 "OTP Reset mật khẩu",
-                "Mã OTP của bạn là: " + otp
-        );
+                "Mã OTP của bạn là: " + otp);
     }
 
     // Cập nhật lại mật khẩu (Lấy lại mật khẩu)
@@ -234,7 +234,8 @@ public class UserService {
         if (form.containsKey("sex")) {
             try {
                 user.setSex(Integer.parseInt(form.get("sex"))); // 0|1
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
         if (form.containsKey("dob")) {
             // chấp nhận "yyyy-MM-dd" (giống date input trên web)
@@ -242,7 +243,8 @@ public class UserService {
             try {
                 Date dob = new SimpleDateFormat("yyyy-MM-dd").parse(dobStr);
                 user.setDob(dob);
-            } catch (ParseException ignored) {}
+            } catch (ParseException ignored) {
+            }
         }
 
         // Upload avatar nếu có file
@@ -257,7 +259,6 @@ public class UserService {
             onboarding.setLevel(form.get("level"));
             userOnboardingRepository.save(onboarding);
         }
-
 
         return userRepository.save(user);
     }
@@ -288,21 +289,21 @@ public class UserService {
         // Hash password
         String hashed = passwordEncoder.encode(rawPassword);
 
-        // Tạo user: isVerified = true, otp rỗng, otpExpires null (đúng tinh thần Express)
+        // Tạo user: isVerified = true, otp rỗng, otpExpires null (đúng tinh thần
+        // Express)
         User newUser = User.builder()
                 .email(email)
                 .password(hashed)
                 .fullname(fullname)
                 .role(role)
                 .isVerified(true)
-                .otp("")           // trống
-                .otpExpires(new Date(0))  // không set hạn OTP
+                .otp("") // trống
+                .otpExpires(new Date(0)) // không set hạn OTP
                 .subscription(
                         // giữ default NONE (nếu entity đã set @Builder.Default thì có thể bỏ block này)
                         com.sc.scifunapi.entity.Subscription.builder()
                                 .status(SubscriptionStatus.NONE)
-                                .build()
-                )
+                                .build())
                 .build();
 
         return userRepository.save(newUser);
@@ -321,7 +322,7 @@ public class UserService {
     }
 
     // Lấy chi tiết
-    public Map<String, Object>  getInfoUser(String id, String authUserId) {
+    public Map<String, Object> getInfoUser(String id, String authUserId) {
         // Chỉ cho phép xem chính mình
         if (authUserId == null || !id.equals(authUserId)) {
             throw new RuntimeException("Bạn không có quyền truy cập thông tin này");
@@ -367,8 +368,7 @@ public class UserService {
         if (search != null && !search.isBlank()) {
             query.addCriteria(new Criteria().orOperator(
                     Criteria.where("email").regex(search, "i"),
-                    Criteria.where("fullname").regex(search, "i")
-            ));
+                    Criteria.where("fullname").regex(search, "i")));
         }
 
         // ẩn các trường nhạy cảm
@@ -426,11 +426,9 @@ public class UserService {
     }
 
     public Map<String, Object> createGuest() {
-        String guestId = UUID.randomUUID().toString();
 
         User guest = User.builder()
-                .id(guestId)
-                .email(guestId + "@guest.local")
+                .email("guest_" + System.currentTimeMillis() + "@guest.local")
                 .fullname("Guest User")
                 .role(Role.USER)
                 .isVerified(true)
@@ -439,10 +437,17 @@ public class UserService {
 
         userRepository.save(guest);
 
-        String token = jwtUtil.generateGuestToken(guest.getId(), guest.getEmail());
+        // 👉 lúc này Mongo đã tự tạo ObjectId
+        String guestId = guest.getId();
+
+        String token = jwtUtil.generateGuestToken(guestId, guest.getEmail());
         boolean isFirstLogin = guest.isFirstLogin();
-        markNotFirstLogin(guest.getId());
-        return Map.of("token", token, "userId", guest.getId(), "isFisrtLogin", isFirstLogin);
+        markNotFirstLogin(guestId);
+
+        return Map.of(
+                "token", token,
+                "userId", guestId,
+                "isFisrtLogin", isFirstLogin);
     }
 
     public void deleteGuestUser(String userId) {
@@ -472,8 +477,8 @@ public class UserService {
         guest.setPassword(passwordEncoder.encode(req.getPassword()));
         guest.setOtp(OtpUtil.generateOTP());
         guest.setOtpExpires(new Date(System.currentTimeMillis() + 5 * 60 * 1000));
-        guest.setVerified(false);       // chờ xác thực OTP
-        guest.setExpiredAt(null);       // ← convert thành user thật
+        guest.setVerified(false); // chờ xác thực OTP
+        guest.setExpiredAt(null); // ← convert thành user thật
 
         userRepository.save(guest);
 
@@ -481,8 +486,7 @@ public class UserService {
         mailService.sendMail(
                 guest.getEmail(),
                 "OTP xác thực đăng ký",
-                "Mã OTP của bạn là: " + guest.getOtp()
-        );
+                "Mã OTP của bạn là: " + guest.getOtp());
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", guest.getId());

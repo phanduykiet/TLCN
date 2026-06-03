@@ -23,7 +23,7 @@ public class BillingController {
     private final MomoService momoService;
     private final OrderRepository orderRepository;
 
-    @Value("${momo.access-key}")      // ← THÊM field này
+    @Value("${momo.access-key}") // ← THÊM field này
     private String momoAccessKey;
 
     @Value("${momo.secret-key}")
@@ -36,14 +36,24 @@ public class BillingController {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             String userId = (auth != null && auth.getDetails() != null)
-                    ? auth.getDetails().toString() : "guest";
+                    ? auth.getDetails().toString()
+                    : "guest";
 
-            double planPrice  = body.get("price") != null
-                    ? Double.parseDouble(body.get("price").toString()) : 0;
-            int durationDays  = body.get("durationDays") != null
-                    ? Integer.parseInt(body.get("durationDays").toString()) : 30;
+            double planPrice = body.get("price") != null
+                    ? Double.parseDouble(body.get("price").toString())
+                    : 0;
+            int durationDays = body.get("durationDays") != null
+                    ? Integer.parseInt(body.get("durationDays").toString())
+                    : 30;
 
             MomoCreateOrderResponse momoRes = momoService.createOrder(planPrice, userId);
+
+            // Map durationDays -> Period
+            Period period = switch (durationDays) {
+                case 7 -> Period.week;
+                case 365 -> Period.year;
+                default -> Period.month; // 30 hoặc bất kỳ giá trị nào khác
+            };
 
             // Lưu order PENDING
             Order order = Order.builder()
@@ -52,19 +62,19 @@ public class BillingController {
                     .total(planPrice)
                     .currency(Currency.VND)
                     .provider(Provider.MOMO)
-                    .providerRef(momoRes.getOrderId())   // orderId MoMo sinh ra
+                    .providerRef(momoRes.getOrderId()) // orderId MoMo sinh ra
                     .status(OrderStatus.PENDING)
                     .planTier(PlanTier.PRO)
-                    .period(Period.month)
+                    .period(period)
                     .build();
             orderRepository.save(order);
 
             Map<String, Object> resp = new java.util.HashMap<>();
-            resp.put("provider",     "MOMO");
-            resp.put("payUrl",       momoRes.getPayUrl());     // mở webview/browser
-            resp.put("deeplink",     momoRes.getDeeplink());   // mở thẳng app MoMo
-            resp.put("qrCodeUrl",    momoRes.getQrCodeUrl());  // hiển thị QR
-            resp.put("orderId",      momoRes.getOrderId());
+            resp.put("provider", "MOMO");
+            resp.put("payUrl", momoRes.getPayUrl()); // mở webview/browser
+            resp.put("deeplink", momoRes.getDeeplink()); // mở thẳng app MoMo
+            resp.put("qrCodeUrl", momoRes.getQrCodeUrl()); // hiển thị QR
+            resp.put("orderId", momoRes.getOrderId());
             resp.put("durationDays", durationDays);
 
             return ResponseEntity.ok(resp);
@@ -78,36 +88,40 @@ public class BillingController {
     }
 
     // ── 2. IPN — MoMo gọi về tự động sau khi thanh toán ─────────
-    // KHÔNG cần auth vì MoMo server gọi thẳng vào đây
     @PostMapping("/momo/ipn")
     public ResponseEntity<?> momoIpn(@RequestBody Map<String, Object> payload) {
         try {
-            String orderId    = (String) payload.get("orderId");
-            String requestId  = (String) payload.get("requestId");
-            int    resultCode = Integer.parseInt(payload.get("resultCode").toString()); // ← parse an toàn hơn
-            long   amount     = Long.parseLong(payload.get("amount").toString());
-            String signature  = (String) payload.get("signature");
+            String orderId = (String) payload.get("orderId");
+            String requestId = (String) payload.get("requestId");
+            int resultCode = Integer.parseInt(payload.get("resultCode").toString()); // ← parse an toàn hơn
+            long amount = Long.parseLong(payload.get("amount").toString());
+            String signature = (String) payload.get("signature");
 
-            // Log để debug
-            System.out.println("=== MOMO IPN ===");
-            System.out.println("orderId: " + orderId);
-            System.out.println("resultCode: " + resultCode);
-            System.out.println("signature nhận: " + signature);
+            Order order = orderRepository.findByProviderRef(orderId)
+                    .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+            int durationDays = switch (order.getPeriod()) {
+                case week -> 7;
+                case month -> 30;
+                case year -> 365;
+                default -> 30;
+            };
+            System.out.println("durationDays from period: " + durationDays);
 
             // Verify chữ ký — accessKey đã có đúng giá trị
-            String rawHash = "accessKey="    + momoAccessKey   // ← FIX: không còn trống
-                    + "&amount="       + amount
-                    + "&extraData="    + payload.getOrDefault("extraData", "")
-                    + "&message="      + payload.getOrDefault("message", "")
-                    + "&orderId="      + orderId
-                    + "&orderInfo="    + payload.getOrDefault("orderInfo", "")
-                    + "&orderType="    + payload.getOrDefault("orderType", "")
-                    + "&partnerCode="  + payload.getOrDefault("partnerCode", "")
-                    + "&payType="      + payload.getOrDefault("payType", "")
-                    + "&requestId="    + requestId
+            String rawHash = "accessKey=" + momoAccessKey // ← FIX: không còn trống
+                    + "&amount=" + amount
+                    + "&extraData=" + payload.getOrDefault("extraData", "")
+                    + "&message=" + payload.getOrDefault("message", "")
+                    + "&orderId=" + orderId
+                    + "&orderInfo=" + payload.getOrDefault("orderInfo", "")
+                    + "&orderType=" + payload.getOrDefault("orderType", "")
+                    + "&partnerCode=" + payload.getOrDefault("partnerCode", "")
+                    + "&payType=" + payload.getOrDefault("payType", "")
+                    + "&requestId=" + requestId
                     + "&responseTime=" + payload.getOrDefault("responseTime", "")
-                    + "&resultCode="   + resultCode
-                    + "&transId="      + payload.getOrDefault("transId", "");
+                    + "&resultCode=" + resultCode
+                    + "&transId=" + payload.getOrDefault("transId", "");
 
             System.out.println("rawHash: " + rawHash);
 
@@ -119,7 +133,7 @@ public class BillingController {
                 return ResponseEntity.ok(Map.of("resultCode", 99, "message", "invalid signature"));
             }
 
-            momoService.applyPaymentIfSuccess(orderId, resultCode, 30);
+            momoService.applyPaymentIfSuccess(orderId, resultCode, durationDays);
 
             return ResponseEntity.ok(Map.of("resultCode", 0, "message", "success"));
 

@@ -1,7 +1,10 @@
 package com.sc.scifunapi.service;
 
 import com.sc.scifunapi.entity.ChatConversation;
+import com.sc.scifunapi.entity.User;
 import com.sc.scifunapi.repository.ChatConversationRepository;
+import com.sc.scifunapi.repository.UserRepository;
+
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -16,9 +19,18 @@ import java.util.UUID;
 public class ChatConversationService {
 
     private final ChatConversationRepository conversationRepo;
+    private final UserRepository userRepository;
 
-    public ChatConversationService(ChatConversationRepository conversationRepo) {
+    public ChatConversationService(ChatConversationRepository conversationRepo,
+            UserRepository userRepository) {
         this.conversationRepo = conversationRepo;
+        this.userRepository = userRepository;
+    }
+
+    public String getUserName(String userId) {
+        return userRepository.findById(userId)
+                .map(User::getFullname)
+                .orElse(null);
     }
 
     public List<ChatConversation> findByUserAndType(String userId, String type) {
@@ -40,8 +52,7 @@ public class ChatConversationService {
                                 .status("OPEN")
                                 .createdAt(new Date())
                                 .updatedAt(new Date())
-                                .build()
-                ));
+                                .build()));
     }
 
     public List<ChatConversation> findByUser(String userId) {
@@ -52,6 +63,7 @@ public class ChatConversationService {
         return conversationRepo.findAll(Sort.by(Sort.Direction.DESC, "updatedAt"));
     }
 
+    // Service - bỏ dòng SecurityContextHolder, dùng auth truyền vào
     public ChatConversation getConversation(String conversationId, Authentication auth) {
         ChatConversation convo = conversationRepo.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
@@ -59,9 +71,9 @@ public class ChatConversationService {
         boolean isAdmin = auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
-        // USER chỉ được xem conversation của chính mình
         if (!isAdmin) {
-            String userId = (String) SecurityContextHolder.getContext().getAuthentication().getDetails();
+            // Dùng auth truyền vào, KHÔNG dùng SecurityContextHolder
+            String userId = (String) auth.getDetails();
             if (convo.getUserId() == null || !convo.getUserId().equals(userId)) {
                 throw new AccessDeniedException("Không có quyền truy cập room này");
             }
