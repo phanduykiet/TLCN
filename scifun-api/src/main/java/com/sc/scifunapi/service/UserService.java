@@ -437,7 +437,6 @@ public class UserService {
 
         userRepository.save(guest);
 
-        // 👉 lúc này Mongo đã tự tạo ObjectId
         String guestId = guest.getId();
 
         String token = jwtUtil.generateGuestToken(guestId, guest.getEmail());

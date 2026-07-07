@@ -35,7 +35,7 @@ public class UserProgressController {
                 );
             }
 
-            String userId = (String) auth.getDetails(); // trong JwtAuthFilter em set username = userId
+            String userId = (String) auth.getDetails();
 
             UserProgress progress = userProgressService.getUserProgressSv(userId, subjectId);
 

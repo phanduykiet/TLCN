@@ -24,4 +24,6 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     // Tìm user có role cụ thể (USER / ADMIN)
     List<User> findByRole(String role);
+
+    List<User> findTop5ByOrderByCreatedAtDesc();
 }
