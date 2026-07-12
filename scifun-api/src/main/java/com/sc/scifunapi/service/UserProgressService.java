@@ -8,7 +8,14 @@ import com.sc.scifunapi.enums.StatPeriod;
 import com.sc.scifunapi.repository.*;
 import lombok.RequiredArgsConstructor;
 import java.util.function.Function;
+import org.bson.Document;
+import org.bson.types.ObjectId;
+import com.mongodb.DBRef;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -22,6 +29,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserProgressService {
 
+    @Autowired
+    private MongoTemplate mongoTemplate;
     private final SubjectRepository subjectRepository;
     private final TopicRepository topicRepository;
     private final QuizRepository quizRepository;
@@ -41,16 +50,36 @@ public class UserProgressService {
                 .orElseThrow(() -> new RuntimeException("Môn học không tồn tại"));
 
         // 2. Lấy tất cả topics thuộc subject
-        // Cần method trong TopicRepository: List<Topic> findBySubject_Id(String subjectId);
         List<Topic> topics = topicRepository.findBySubject_Id(subjectId);
+        List<ObjectId> topicObjectIds = topics.stream()
+                .map(t -> new ObjectId(t.getId()))
+                .toList();
 
-        List<Result> userResults = resultRepository.findByUserId(userId);
+        // Lấy TẤT CẢ quiz thuộc các topic này trong 1 query duy nhất (raw, không qua entity mapping)
+        Query quizQuery = new Query(Criteria.where("topic.$id").in(topicObjectIds));
+        List<Document> allQuizDocs = mongoTemplate.find(quizQuery, Document.class, "quizzes");
 
-        Map<String, Result> resultMap = userResults.stream()
-                .collect(Collectors.toMap(
-                        r -> r.getQuiz().getId(),
-                        Function.identity()
-                ));
+        // Gom nhóm quiz theo topicId ngay trong Java, không cần resolve DBRef
+        Map<String, List<Document>> quizzesByTopicId = new HashMap<>();
+        for (Document doc : allQuizDocs) {
+            Object topicRef = doc.get("topic");
+            if (topicRef instanceof DBRef dbRef) {
+                String topicId = dbRef.getId().toString();
+                quizzesByTopicId.computeIfAbsent(topicId, k -> new ArrayList<>()).add(doc);
+            }
+        }
+
+        // Lấy TẤT CẢ result của user trong 1 query duy nhất (raw, tránh resolve DBRef quiz)
+        Query resultQuery = new Query(Criteria.where("userId").is(userId));
+        List<Document> resultDocs = mongoTemplate.find(resultQuery, Document.class, "results");
+
+        Map<String, Document> resultMap = new HashMap<>();
+        for (Document doc : resultDocs) {
+            Object quizRef = doc.get("quiz");
+            if (quizRef instanceof DBRef dbRef) {
+                resultMap.put(dbRef.getId().toString(), doc);
+            }
+        }
 
         List<UserProgress.TopicProgress> topicsData = new ArrayList<>();
         int totalQuizzes = 0;
@@ -58,32 +87,35 @@ public class UserProgressService {
 
         for (Topic topic : topics) {
 
-            // Lấy quizzes thuộc topic
-            // Cần method trong QuizRepository: List<Quiz> findByTopic_Id(String topicId);
-            List<Quiz> quizzes = quizRepository.findByTopic_Id(topic.getId());
-            totalQuizzes += quizzes.size();
+            List<Document> quizDocs = quizzesByTopicId.getOrDefault(topic.getId(), List.of());
+            totalQuizzes += quizDocs.size();
 
             List<UserProgress.QuizProgress> quizzesData = new ArrayList<>();
             int topicCompletedQuizzes = 0;
             double topicScoreSum = 0.0;
 
-            for (Quiz quiz : quizzes) {
-                // Kiểm tra xem user đã làm quiz này chưa
-                Result result = resultMap.get(quiz.getId());
+            for (Document quizDoc : quizDocs) {
+                String quizId = quizDoc.getObjectId("_id").toHexString();
+                Document result = resultMap.get(quizId);
 
                 UserProgress.QuizProgress qp = new UserProgress.QuizProgress();
-                qp.setQuizId(quiz.getId());
-                qp.setName(quiz.getTitle());
+                qp.setQuizId(quizId);
+                qp.setName(quizDoc.getString("title"));
 
                 if (result != null) {
                     topicCompletedQuizzes++;
                     totalCompletedQuizzes++;
-                    topicScoreSum += result.getAverageScore();
 
-                    qp.setScore(result.getAverageScore());
-                    qp.setBestScore(result.getBestScore());
-                    qp.setAttempts(result.getAttempts());
-                    qp.setLastSubmissionAt(result.getLastSubmissionAt());
+                    double avgScore = result.get("averageScore") != null
+                            ? ((Number) result.get("averageScore")).doubleValue() : 0.0;
+                    topicScoreSum += avgScore;
+
+                    qp.setScore(avgScore);
+                    qp.setBestScore(result.get("bestScore") != null
+                            ? ((Number) result.get("bestScore")).doubleValue() : 0.0);
+                    qp.setAttempts(result.get("attempts") != null
+                            ? ((Number) result.get("attempts")).intValue() : 0);
+                    qp.setLastSubmissionAt((Date) result.get("lastSubmissionAt"));
                 } else {
                     qp.setScore(null);
                     qp.setBestScore(0.0);
@@ -94,9 +126,8 @@ public class UserProgressService {
                 quizzesData.add(qp);
             }
 
-            // Tính progress và average score của topic
-            double topicProgress = quizzes.size() > 0
-                    ? (topicCompletedQuizzes * 100.0 / quizzes.size())
+            double topicProgress = quizDocs.size() > 0
+                    ? (topicCompletedQuizzes * 100.0 / quizDocs.size())
                     : 0.0;
 
             double topicAvgScore = topicCompletedQuizzes > 0
@@ -107,7 +138,7 @@ public class UserProgressService {
             tp.setTopicId(topic.getId());
             tp.setName(topic.getName());
             tp.setProgress(round2(topicProgress));
-            tp.setTotalQuizzes(quizzes.size());
+            tp.setTotalQuizzes(quizDocs.size());
             tp.setCompletedQuizzes(topicCompletedQuizzes);
             tp.setAverageScore(round2(topicAvgScore));
             tp.setQuizzes(quizzesData);

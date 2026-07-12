@@ -18,6 +18,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 @RequiredArgsConstructor
@@ -253,17 +256,39 @@ public class QuizService {
         List<Quiz> allQuizzes = quizRepository.findAll();
 
         // Chỉ lấy quiz đã từng có người làm
+        // Chỉ lấy quiz đã từng có người làm
         Date epoch = new Date(0L);
-        List<Quiz> quizzes = allQuizzes.stream()
+        List<Quiz> attempted = allQuizzes.stream()
                 .filter(q -> q.getLastAttemptAt() != null && !q.getLastAttemptAt().equals(epoch))
-                .filter(q -> {
-                    if (subjectId == null || subjectId.isBlank()) return true;
-                    if (q.getTopic() == null) return false;
-                    Topic topic = q.getTopic();
-                    if (topic.getSubject() == null) return false;
-                    return subjectId.equals(topic.getSubject().getId());
-                })
                 .toList();
+
+        List<Quiz> quizzes;
+
+        if (subjectId == null || subjectId.isBlank()) {
+            // Không cần lọc theo subject -> không đụng Topic/Subject -> giữ tốc độ nhanh
+            quizzes = attempted;
+        } else {
+            // Có lọc theo subject -> phải resolve lazy DBRef Topic/Subject
+            // Chạy song song để giảm thời gian chờ round-trip tới Atlas
+            ExecutorService executor = Executors.newFixedThreadPool(20);
+            try {
+                List<CompletableFuture<Quiz>> futures = attempted.stream()
+                        .map(q -> CompletableFuture.supplyAsync(() -> {
+                            if (q.getTopic() == null) return null;
+                            Topic topic = q.getTopic();
+                            if (topic.getSubject() == null) return null;
+                            return subjectId.equals(topic.getSubject().getId()) ? q : null;
+                        }, executor))
+                        .toList();
+
+                quizzes = futures.stream()
+                        .map(CompletableFuture::join)
+                        .filter(Objects::nonNull)
+                        .toList();
+            } finally {
+                executor.shutdown();
+            }
+        }
 
         if (quizzes.isEmpty()) {
             Map<String, Object> res = new HashMap<>();

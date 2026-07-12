@@ -30,10 +30,6 @@ public class LeaderboardService {
     private final SubjectRepository subjectRepository;
     private final NotificationService notificationService;
 
-    /**
-     * Làm mới bảng xếp hạng cho một môn học (alltime / daily / weekly / monthly)
-     * Logic tương đương rebuildSubjectLeaderboardSv bên Express.
-     */
     @Transactional
     public Map<String, Object> rebuildSubjectLeaderboard(String subjectId, String period) {
 
@@ -188,18 +184,15 @@ public class LeaderboardService {
                                     .userId(userId)
                                     .subjectId(subjectId)
                                     .subjectName(subject.getName())
-                                    .period(period)       // "daily" | "weekly" | "monthly" | "alltime"
+                                    .period(period)    
                                     .oldRank(oldRank)
                                     .newRank(rank)
-                                    .persist(true)        // lưu DB
-                                    .email(true)          // nếu không muốn gửi mail thì để false
+                                    .persist(true)       
+                                    .email(true)     
                                     .build()
                     );
                     notified++;
                 } catch (Exception ex) {
-                    // tránh làm fail cả transaction chỉ vì lỗi gửi thông báo
-                    // có thể log warn ở đây
-                    // log.warn("Failed to send rank-change notification for user {}", userId, ex);
                 }
             }
         }
