@@ -257,9 +257,9 @@ public class QuizService {
         List<Quiz> quizzes = allQuizzes.stream()
                 .filter(q -> q.getLastAttemptAt() != null && !q.getLastAttemptAt().equals(epoch))
                 .filter(q -> {
-                    if (subjectId == null || subjectId.isBlank()) return true; // không filter
+                    if (subjectId == null || subjectId.isBlank()) return true;
                     if (q.getTopic() == null) return false;
-                    Topic topic = q.getTopic(); // DBRef lazy load tại đây
+                    Topic topic = q.getTopic();
                     if (topic.getSubject() == null) return false;
                     return subjectId.equals(topic.getSubject().getId());
                 })

@@ -11,9 +11,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -36,20 +39,19 @@ public class NotificationService {
         if (page <= 0) page = 1;
         if (limit <= 0) limit = 20;
 
-        int skip = (page - 1) * limit;
+        // Pageable dùng index bắt đầu từ 0, nên page truyền vào phải trừ 1
+        Pageable pageable = PageRequest.of(page - 1, limit);
 
-        List<Notification> list = notificationRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, skip, limit);
-
-        long total = notificationRepository.countByUserId(userId);
+        Page<Notification> result = notificationRepository
+                .findByUserIdOrderByCreatedAtDesc(userId, pageable);
 
         return Map.of(
-                "items", list,
+                "items", result.getContent(),
                 "pagination", Map.of(
                         "page", page,
                         "limit", limit,
-                        "total", total,
-                        "totalPages", (int) Math.ceil((double) total / limit)
+                        "total", result.getTotalElements(),
+                        "totalPages", result.getTotalPages()
                 )
         );
     }

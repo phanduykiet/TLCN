@@ -21,7 +21,7 @@ public class Result {
     @Field("userId")
     private String userId;
 
-    @DBRef
+    @DBRef(lazy = true)
     @Field("quiz")
     private Quiz quiz;
 

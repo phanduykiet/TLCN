@@ -18,6 +18,9 @@ public interface NotificationRepository extends MongoRepository<Notification, St
     // Lấy danh sách notification theo user với phân trang
     Page<Notification> findByUserId(String userId, Pageable pageable);
 
+    Page<Notification> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
+
+
     // Tổng số notification của user
     long countByUserId(String userId);
 

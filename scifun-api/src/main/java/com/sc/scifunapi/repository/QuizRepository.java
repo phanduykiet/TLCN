@@ -11,5 +11,8 @@ public interface QuizRepository extends MongoRepository<Quiz, String> {
 
     List<Quiz> findTop5ByOrderByUniqueUserCountDesc();
 
+    List<Quiz> findByTopic_IdIn(List<String> topicIds);
+
+
     List<Quiz> findByTopic_Subject_Id(String subjectId);
 }

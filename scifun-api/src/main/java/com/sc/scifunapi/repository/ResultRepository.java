@@ -11,6 +11,8 @@ public interface ResultRepository extends MongoRepository<Result, String> {
 
     Result findByUserIdAndQuiz_Id(String userId, String quizId);
 
+    List<Result> findByUserIdAndQuiz_IdIn(String userId, List<String> quizIds);
+
     List<Result> findByUserId(String userId);
 
     List<Result> findByQuiz_Id(String quizId);

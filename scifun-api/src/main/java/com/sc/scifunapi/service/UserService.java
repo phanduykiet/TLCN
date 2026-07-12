@@ -460,7 +460,7 @@ public class UserService {
     }
 
     public Map<String, Object> convertGuestToUser(String userId, RegisterRequest req) {
-        // Kiểm tra email đã tồn tại chưa (tránh trùng với user thật khác)
+        // Kiểm tra email đã tồn tại chưa
         userRepository.findByEmail(req.getEmail()).ifPresent(existing -> {
             if (!existing.getId().equals(userId)) {
                 throw new RuntimeException("Email đã được sử dụng, vui lòng dùng email khác");
@@ -477,7 +477,7 @@ public class UserService {
         guest.setOtp(OtpUtil.generateOTP());
         guest.setOtpExpires(new Date(System.currentTimeMillis() + 5 * 60 * 1000));
         guest.setVerified(false); // chờ xác thực OTP
-        guest.setExpiredAt(null); // ← convert thành user thật
+        guest.setExpiredAt(null);
 
         userRepository.save(guest);
 

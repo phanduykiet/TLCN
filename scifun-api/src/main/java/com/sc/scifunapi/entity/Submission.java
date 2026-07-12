@@ -36,7 +36,7 @@ public class Submission {
         @Field("_id")
         private String id;
 
-        @DBRef
+        @DBRef(lazy = true)
         private Question question;
 
         // NEW: nhiều đáp án user chọn

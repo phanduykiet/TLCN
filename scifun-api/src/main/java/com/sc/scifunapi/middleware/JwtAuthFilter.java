@@ -29,7 +29,7 @@ import java.util.Map;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
-    private final UserRepository userRepository; // thêm mới
+    private final UserRepository userRepository;
     private final UserService userService;
 
     @Override
@@ -53,7 +53,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             var user = userRepository.findById(userId).orElse(null);
             if (user != null && user.getExpiredAt() != null) {
                 if (user.getExpiredAt().before(new Date())) {
-                    userService.deleteGuestUser(user.getId()); // ← thay dòng cũ
+                    userService.deleteGuestUser(user.getId());
                     sendError(res, 401, "Phiên dùng thử đã hết hạn, vui lòng đăng ký tài khoản");
                     return;
                 }
@@ -77,7 +77,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         } catch (ExpiredJwtException e) {
             Boolean isGuest = e.getClaims().get("isGuest", Boolean.class);
             if (Boolean.TRUE.equals(isGuest)) {
-                sendError(res, 401, "GUEST_TOKEN_EXPIRED"); // client tự gọi refresh
+                sendError(res, 401, "GUEST_TOKEN_EXPIRED");
             } else {
                 sendError(res, 401, "Token đã hết hạn, vui lòng đăng nhập lại");
             }
